@@ -1501,13 +1501,15 @@ static void FMEnsureWindowOrientationLayout(void) {
         // (~466x678pt) and the unfolded inner display (~626x890pt) are both
         // portrait, so a fold changes the size without changing the
         // orientation — and the old code returned here without doing
-        // anything, leaving guest windows at the folded size. Resize only
-        // windows that still match the previous portrait size (i.e. windows
-        // that were full-screen before the fold); anything else — a
-        // multitask window, PiP, a settings window — is left alone.
-        // The first call only records the size and returns, so startup
-        // behaviour is unchanged. Size comparison makes repeated calls
-        // no-ops, so layoutSubviews cannot loop here.
+        // anything, leaving guest windows at the folded size. Full-screen
+        // windows are resized to the new portrait size; floating windows
+        // (multitask, PiP, settings) are scaled proportionally instead of
+        // being skipped — an approximation of the app's own windowed
+        // sizing, which the plugin cannot reproduce exactly (the app
+        // re-derives decorated windows from its stored frame on the next
+        // settings update). The first call only records the size and
+        // returns, so startup behaviour is unchanged. Size comparison
+        // makes repeated calls no-ops, so layoutSubviews cannot loop here.
         static CGSize lastPortraitSize = {0, 0};
         BOOL portraitOnlyMatching = NO;
         CGSize oldPortrait = CGSizeZero;
@@ -1569,11 +1571,38 @@ static void FMEnsureWindowOrientationLayout(void) {
         for(UIWindow *w in windows) {
             if(w.windowLevel >= UIWindowLevelAlert) continue;
             if([w isKindOfClass:NSClassFromString(@"LCOrbitOverlayWindow")]) continue;
-            // Duo fold: only full-screen portrait windows move; a window
-            // that was already a different size belongs to something else.
+            // Duo fold: a window that does not match the old full-screen
+            // size is a floating window (multitask, PiP, settings) — scale
+            // it proportionally to the new portrait size instead of
+            // leaving it at the folded size. Scaling the origin too
+            // preserves the normalized position (the same rule the app's
+            // own windowed sizing uses). This is an approximation: the app
+            // re-derives decorated windows from its stored frame on the
+            // next settings update, so a plugin-side scale may be
+            // overwritten there — but it is better than staying folded.
             if(portraitOnlyMatching &&
                (fabs(w.bounds.size.width - oldPortrait.width) > 1.0 ||
-                fabs(w.bounds.size.height - oldPortrait.height) > 1.0)) continue;
+                fabs(w.bounds.size.height - oldPortrait.height) > 1.0)) {
+                CGFloat scaleW = oldPortrait.width > 0 ? portraitW / oldPortrait.width : 1.0;
+                CGFloat scaleH = oldPortrait.height > 0 ? portraitH / oldPortrait.height : 1.0;
+                CGRect f = w.frame;
+                CGRect scaled = CGRectMake(f.origin.x * scaleW, f.origin.y * scaleH,
+                                           f.size.width * scaleW, f.size.height * scaleH);
+                if(fabs(scaled.size.width - f.size.width) > 1.0 ||
+                   fabs(scaled.size.height - f.size.height) > 1.0 ||
+                   fabs(scaled.origin.x - f.origin.x) > 1.0 ||
+                   fabs(scaled.origin.y - f.origin.y) > 1.0) {
+                    w.frame = scaled;
+                    UIViewController *root = w.rootViewController;
+                    if(root && root.isViewLoaded) {
+                        if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
+                        if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
+                        root.view.frame = w.bounds;
+                        [root.view setNeedsLayout];
+                    }
+                }
+                continue;
+            }
             if(fabs(w.bounds.size.width - targetW) > 1.0 || fabs(w.bounds.size.height - targetH) > 1.0) {
                 w.frame = targetBounds;
                 w.bounds = targetBounds;
