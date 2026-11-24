@@ -45,14 +45,24 @@
     // portrait->portrait fold fires no orientation notification.
     // Broadcast the size change so FMManager (draw / buildPanel /
     // settings window) refreshes on fold. Gated on an actual bounds
-    // change so this does not spam on every layout pass.
+    // change, and coalesced to at most one post per runloop: during the
+    // fold animation bounds change every frame, and each post triggers
+    // full draw rebuilds — without coalescing one unfold costs dozens
+    // of rebuilds on the main thread.
     static CGRect lastBounds = {{0, 0}, {0, 0}};
+    static BOOL layoutChangePending = NO;
     CGRect b = self.view.bounds;
     if(b.size.width > 0 && b.size.height > 0 &&
        (fabs(b.size.width - lastBounds.size.width) > 1.0 ||
         fabs(b.size.height - lastBounds.size.height) > 1.0)) {
         lastBounds = b;
-        [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification" object:nil];
+        if(!layoutChangePending) {
+            layoutChangePending = YES;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                layoutChangePending = NO;
+                [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification" object:nil];
+            });
+        }
     }
 }
 @end
