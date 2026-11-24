@@ -40,8 +40,12 @@
 - `initialDecoratedWindowSize(for:landscape:)`：悬浮 Guest 窗口的初始尺寸改为按
   容器比例算，不再固定 320×480 / 480×320。
 
-该文件放在 `MultitaskSupport/` 同步目录下，Xcode 会自动编入
-LiveContainerSwiftUI target，不用改 pbxproj。
+该文件放在 `MultitaskSupport/` 同步目录下，但这个工程的同步目录**不会**
+自动编入 target：新文件必须写进 `project.pbxproj` 里
+`MultitaskSupport` 的 `PBXFileSystemSynchronizedBuildFileExceptionSet`
+的 `membershipExceptions`（目标 `LiveContainerSwiftUI`），否则编译报
+`cannot find 'LCDuoGeometry' in scope`。2026-11-24 的首次构建就是这么
+红的，补上这一行才修好。以后再往这个目录加文件，同样要补这一行。
 
 ### 2. `MultitaskSupport/MultitaskDockView.swift`（多任务 Dock）
 
@@ -86,7 +90,10 @@ LiveContainerSwiftUI target，不用改 pbxproj。
 仓库里 `UILaunchStoryboardName = LaunchScreen` 一直指向一个不存在的文件，
 启动只能回落到 `Info.plist` 里的老式 `UILaunchImages`（最大只有 414×736，
 没有 Duo 的尺寸）。补了一个纯 Auto Layout 的启动屏（系统背景 + 居中标题），
-放在 `Resources/` 同步目录下，自动编入主 target，任何尺寸都能正常启动。
+放在 `Resources/` 同步目录下，同时写进 `project.pbxproj` 里
+`Resources` 的 `PBXFileSystemSynchronizedBuildFileExceptionSet`
+的 `membershipExceptions`（目标 `LiveContainer`），否则不会编入主
+target、启动屏等于没补——这个工程的新文件不自动进 target（见上）。
 （`UIMainStoryboardFile = Main` 同样指向不存在的文件，但那是 SwiftUI `@main`
 的遗留键，实测启动不受影响，本次不动。）
 
