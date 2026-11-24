@@ -79,6 +79,26 @@ PY
 grep -Fq '_lastReportedSceneBounds' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'addObserverForName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+# Guest cold launch on foldable inner displays: use scene orientation before
+# consulting the physical-device sensor, and never force the guest root view's
+# frame/bounds during the launch transition.
+python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
+from pathlib import Path
+import sys
+source=Path(sys.argv[1]).read_text()
+start=source.index("- (UIInterfaceOrientation)fm_preferredInterfaceOrientationForPresentation {")
+end=source.index("\n}",start)
+body=source[start:end]
+assert "self.viewIfLoaded.window.windowScene" in body
+assert "scene.interfaceOrientation" in body
+assert body.index("scene.interfaceOrientation") < body.index("UIDevice.currentDevice.orientation")
+layout_start=source.index("static void FMEnsureWindowOrientationLayout(void) {")
+layout_end=source.index("\n}",layout_start)
+layout=source[layout_start:layout_end]
+assert "root.view.frame=sceneBounds" not in layout
+assert "root.view.bounds=sceneBounds" not in layout
+print("Foldable guest cold-launch orientation checks: PASS")
+PY
 # The developer-only tweak-to-host option should display an overlay in LC UI
 # without loosening the existing Guest, SideStore, or LiveProcess exclusions.
 grep -Fq '+ (BOOL)isHostUI' "$ROOT/LCOrbit/Core/LCOrbitHost.m"
