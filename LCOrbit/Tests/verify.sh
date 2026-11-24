@@ -72,8 +72,13 @@ assert "scene.windows" in body
 assert "window.frame=sceneFrame" in body
 assert "UIScreen.mainScreen.bounds" not in body
 assert "UIDevice.currentDevice.orientation" not in body
+assert "allowedLandscape" in body
 print("Foldable scene geometry checks: PASS")
 PY
+# A fold/unfold size change must reach FloatingMenu even when device orientation is unchanged.
+grep -Fq '_lastReportedSceneBounds' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
+grep -Fq 'postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
+grep -Fq 'addObserverForName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
 # The developer-only tweak-to-host option should display an overlay in LC UI
 # without loosening the existing Guest, SideStore, or LiveProcess exclusions.
 grep -Fq '+ (BOOL)isHostUI' "$ROOT/LCOrbit/Core/LCOrbitHost.m"
