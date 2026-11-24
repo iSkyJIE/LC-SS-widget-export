@@ -1485,7 +1485,10 @@ static void FMEnsureWindowOrientationLayout(void) {
                 UIWindowScene *scene=(UIWindowScene *)candidate;
                 if(scene.activationState!=UISceneActivationStateForegroundActive) continue;
                 UIInterfaceOrientation orientation=scene.interfaceOrientation;
-                if(!UIInterfaceOrientationIsLandscape(orientation)) continue;
+                BOOL allowRightLandscape=!BoolPref(@"lockBanRightLandscape",YES);
+                BOOL allowedLandscape=orientation==UIInterfaceOrientationLandscapeRight ||
+                    (allowRightLandscape && orientation==UIInterfaceOrientationLandscapeLeft);
+                if(!allowedLandscape) continue;
 
                 // Use each scene's own coordinate space. Never apply one
                 // display's dimensions to windows hosted by another scene.
@@ -1518,6 +1521,7 @@ static void FMEnsureWindowOrientationLayout(void) {
             }
         }
     } @catch(NSException *exception) {
+        (void)exception;
         // A transient scene transition must not prevent UIKit from laying out
         // the next frame. The next scene/layout callback retries with fresh bounds.
     }
