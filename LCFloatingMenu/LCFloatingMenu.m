@@ -1602,26 +1602,16 @@ static void FMEnsureWindowOrientationLayout(void) {
     [self fm_layoutSubviews];
     if(!BoolPref(@"unlockOrientation", YES) || self.windowLevel >= UIWindowLevelAlert) return;
     if([self isKindOfClass:NSClassFromString(@"LCOrbitOverlayWindow")]) return;
-    
-    BOOL isLandscape = NO;
-    BOOL allowRightLandscape = !BoolPref(@"lockBanRightLandscape", YES);
-    if(@available(iOS 13.0, *)) {
-        UIWindowScene *scene = self.windowScene;
-        if(scene) {
-            UIInterfaceOrientation orient = scene.interfaceOrientation;
-            if(orient == UIInterfaceOrientationLandscapeRight || (allowRightLandscape && orient == UIInterfaceOrientationLandscapeLeft)) {
-                isLandscape = YES;
-            }
-        }
-    }
-    if(!isLandscape) {
-        UIDeviceOrientation dev = UIDevice.currentDevice.orientation;
-        if(dev == UIDeviceOrientationLandscapeLeft || (allowRightLandscape && dev == UIDeviceOrientationLandscapeRight)) {
-            isLandscape = YES;
-        }
-    }
-    if(!isLandscape) return; // 竖屏下完全不触发重排
-    
+
+    // Duo fold: a fold changes the window size without changing the
+    // orientation and without firing a device-orientation notification,
+    // so the old landscape-only gate meant this ensure pass never
+    // ran on a portrait->portrait fold and guest windows stayed at the
+    // folded size (the inner screen looked frozen). Run the ensure pass
+    // on every window layout instead; FMEnsureWindowOrientationLayout
+    // no-ops when nothing changed and is guarded against re-entry, so
+    // this cannot loop. Orientation handling itself lives inside that
+    // function.
     FMEnsureWindowOrientationLayout();
 }
 @end
