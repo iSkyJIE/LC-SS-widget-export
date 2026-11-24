@@ -1637,11 +1637,31 @@ static void FMEnsureWindowOrientationLayout(void) {
     // so the old landscape-only gate meant this ensure pass never
     // ran on a portrait->portrait fold and guest windows stayed at the
     // folded size (the inner screen looked frozen). Run the ensure pass
-    // on every window layout instead; FMEnsureWindowOrientationLayout
+    // when a window's layout runs instead; FMEnsureWindowOrientationLayout
     // no-ops when nothing changed and is guarded against re-entry, so
     // this cannot loop. Orientation handling itself lives inside that
     // function.
-    FMEnsureWindowOrientationLayout();
+    //
+    // Throttle: during the fold animation the system drives the window
+    // size frame by frame, and every layout pass here would otherwise
+    // run the full ensure pass (and set frames) against the animation.
+    // Skip when this window already matches the scene size, and run the
+    // ensure at most once per runloop.
+    if(@available(iOS 13.0, *)) {
+        UIWindowScene *scene = self.windowScene;
+        if(scene) {
+            CGSize sceneSize = scene.coordinateSpace.bounds.size;
+            if(fabs(self.bounds.size.width - sceneSize.width) <= 1.0 &&
+               fabs(self.bounds.size.height - sceneSize.height) <= 1.0) return;
+        }
+    }
+    static BOOL fmEnsurePending = NO;
+    if(fmEnsurePending) return;
+    fmEnsurePending = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        fmEnsurePending = NO;
+        FMEnsureWindowOrientationLayout();
+    });
 }
 @end
 
@@ -2287,6 +2307,7 @@ static UIImage *FMLogoBadgeImage(CGFloat diameter) {
     CADisplayLink *_morphLink;
     BOOL _morphCompact,_morphActive,_morphDragging,_morphOpening,_morphFromBead;
     BOOL _drawDeferred,_panUsesMorph,_panelDragLive;
+    BOOL _layoutRefreshPending;
     BOOL _popRevealed,_popStarted;
     // Long-press scrub: a glass lens over the app list.
     UIView *_scrubLens,*_scrubLabel;
@@ -2421,11 +2442,14 @@ static UIImage *FMLogoBadgeImage(CGFloat diameter) {
 - (void)handleOrientationOrLayoutChange {
     if(_isPanning) return;
     [self refreshLayoutForOrientation];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.12*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
-        if(self->_isPanning) return;
-        [self refreshLayoutForOrientation];
-    });
+    // Duo fold: layout-change notifications can arrive every frame during
+    // the fold animation, and each one used to schedule two more delayed
+    // refreshes. Keep a single pending delayed refresh so repeated
+    // notifications do not stack up full draw rebuilds.
+    if(_layoutRefreshPending) return;
+    _layoutRefreshPending = YES;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(0.35*NSEC_PER_SEC)),dispatch_get_main_queue(),^{
+        self->_layoutRefreshPending = NO;
         if(self->_isPanning) return;
         [self refreshLayoutForOrientation];
     });
@@ -2756,6 +2780,30 @@ static UIImage *FMLogoBadgeImage(CGFloat diameter) {
 
 - (void)drawOrb {
     if(_isPanning || _morphActive) return;
+    CGRect f=[self orbFrame];
+    // Duo fold: draw runs on every layout change during the fold
+    // animation. If the bead already exists with the same side and size,
+    // just move it instead of destroying and rebuilding the button, the
+    // glass effect and all its gestures dozens of times per unfold.
+    // A side flip or size change still takes the full rebuild below.
+    if(self.orb && self.orb.superview == self.overlayView &&
+       ((FMHitButton *)self.orb).docksLeft == self.left &&
+       fabs(self.orb.frame.size.width - f.size.width) <= 1.0 &&
+       fabs(self.orb.frame.size.height - f.size.height) <= 1.0) {
+        self.orb.frame = f;
+        BOOL redEnabled=BoolPref(@"autoCheckUpdate",YES) && BoolPref(@"redBreathingLight",YES);
+        BOOL blueEnabled=BoolPref(@"blueBreathingLight",NO);
+        BOOL redPulse = redEnabled && self.orbUpdateAvailable;
+        BOOL bluePulse = blueEnabled && !redPulse;
+        CGFloat alpha=BoolPref([@"override." stringByAppendingString:GuestID()],NO)?
+            FloatPref([@"appAlpha." stringByAppendingString:GuestID()],FloatPref(@"idleAlpha",.72)):
+            FloatPref(@"idleAlpha",.72);
+        self.orbNormalAlpha=Clamp(alpha,.25,1);
+        self.orbFaded=NO;
+        self.orb.alpha=self.isOpen?0:(redPulse?1:self.orbNormalAlpha);
+        [self applyOrbUpdateIndicator];
+        return;
+    }
     [self cancelOrbFade];
     for(UIView *sub in [self.overlayView.subviews copy]) {
         if([sub isKindOfClass:[FMHitButton class]] || sub.tag==9200 || sub==self.orb) {
