@@ -85,15 +85,14 @@
   首次调用只记录不改，保证启动行为不变；尺寸比较让重复调用都是 no-op，
   `layoutSubviews` 不会因此死循环。
 
-### 6. 新增 `Resources/LaunchScreen.storyboard`（启动屏）
+### 6. 启动屏：不补（已撤回）
 
 仓库里 `UILaunchStoryboardName = LaunchScreen` 一直指向一个不存在的文件，
-启动只能回落到 `Info.plist` 里的老式 `UILaunchImages`（最大只有 414×736，
-没有 Duo 的尺寸）。补了一个纯 Auto Layout 的启动屏（系统背景 + 居中标题），
-放在 `Resources/` 同步目录下，同时写进 `project.pbxproj` 里
-`Resources` 的 `PBXFileSystemSynchronizedBuildFileExceptionSet`
-的 `membershipExceptions`（目标 `LiveContainer`），否则不会编入主
-target、启动屏等于没补——这个工程的新文件不自动进 target（见上）。
+启动回落到 `Info.plist` 里的老式 `UILaunchImages`。本来补了一个纯 Auto Layout
+的启动屏（`Resources/LaunchScreen.storyboard`），但它在 Xcode 26.2 的
+`CompileStoryboard` 上失败且日志长期不给诊断，卡住整个构建；启动屏不是
+Duo 适配必需的（原版没有它也能启动），2026-11-23 已撤回该文件并从
+`project.pbxproj` 的 `Resources` exception set 里删掉登记，恢复成原版行为。
 （`UIMainStoryboardFile = Main` 同样指向不存在的文件，但那是 SwiftUI `@main`
 的遗留键，实测启动不受影响，本次不动。）
 
