@@ -95,15 +95,39 @@
     return layer;
 }
 - (void)updateFrame {
-    if(!_window) return;
-    CGRect frame=_window.windowScene.coordinateSpace.bounds;
+    UIWindow *window=_window;
+    if(!window) return;
+    CGRect frame=window.windowScene.coordinateSpace.bounds;
     if(!isfinite(frame.origin.x) || !isfinite(frame.origin.y) ||
        !isfinite(frame.size.width) || !isfinite(frame.size.height) ||
        frame.size.width<=0 || frame.size.height<=0) return;
-    if(!CGRectEqualToRect(_window.frame,frame)) _window.frame=frame;
-    CGRect bounds=_window.rootViewController.view.bounds;
-    if(isfinite(bounds.size.width) && isfinite(bounds.size.height) && bounds.size.width>0 && bounds.size.height>0)
-        for(UIView *layer in _modules.allValues) if(!CGRectEqualToRect(layer.frame,bounds)) layer.frame=bounds;
+
+    BOOL geometryChanged=NO;
+    if(!CGRectEqualToRect(window.frame,frame)) {
+        window.frame=frame;
+        geometryChanged=YES;
+    }
+    CGRect bounds=window.rootViewController.view.bounds;
+    if(isfinite(bounds.size.width) && isfinite(bounds.size.height) &&
+       bounds.size.width>0 && bounds.size.height>0) {
+        for(UIView *layer in _modules.allValues) {
+            if(!CGRectEqualToRect(layer.frame,bounds)) {
+                layer.frame=bounds;
+                geometryChanged=YES;
+            }
+        }
+    }
+    // A scene can resize without changing device orientation (fold/unfold,
+    // Stage Manager, or a window resize). Notify the owning module only after
+    // the overlay and its content layer have adopted the new scene geometry.
+    if(geometryChanged) {
+        __weak typeof(self) weakSelf=self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if(!weakSelf || weakSelf.window!=window) return;
+            [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"
+                object:window];
+        });
+    }
 }
 - (void)unmountModule:(NSString *)identifier {
     UIView *layer=_modules[identifier];
