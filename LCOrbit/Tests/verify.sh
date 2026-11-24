@@ -65,7 +65,7 @@ from pathlib import Path
 import sys
 source=Path(sys.argv[1]).read_text()
 start=source.index("static void FMEnsureWindowOrientationLayout(void) {")
-end=source.index("\\n}\\n\\n@interface UIWindow (FMOrientationLayout)",start)
+end=source.index("\n}\n\n@interface UIWindow (FMOrientationLayout)",start)
 body=source[start:end]
 assert "scene.coordinateSpace.bounds" in body
 assert "scene.windows" in body
