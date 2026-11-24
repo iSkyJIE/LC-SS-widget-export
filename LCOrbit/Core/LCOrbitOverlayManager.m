@@ -31,10 +31,8 @@
     __weak typeof(self) weakSelf=self;
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
         [weakSelf.manager updateFrame];
-        [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification" object:nil];
     } completion:^(id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
         [weakSelf.manager updateFrame];
-        [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification" object:nil];
     }];
 }
 - (void)viewDidLayoutSubviews {
@@ -46,6 +44,8 @@
 @implementation LCOrbitOverlayManager {
     UIWindow *_window;
     NSMutableDictionary<NSString *,UIView *> *_modules;
+    CGRect _lastReportedSceneBounds;
+    BOOL _hasReportedSceneBounds;
 }
 - (instancetype)init {
     if((self=[super init])) _modules=[NSMutableDictionary dictionary];
@@ -102,7 +102,10 @@
        !isfinite(frame.size.width) || !isfinite(frame.size.height) ||
        frame.size.width<=0 || frame.size.height<=0) return;
 
-    BOOL geometryChanged=NO;
+    BOOL geometryChanged=!_hasReportedSceneBounds ||
+        !CGRectEqualToRect(_lastReportedSceneBounds,frame);
+    _lastReportedSceneBounds=frame;
+    _hasReportedSceneBounds=YES;
     if(!CGRectEqualToRect(window.frame,frame)) {
         window.frame=frame;
         geometryChanged=YES;
