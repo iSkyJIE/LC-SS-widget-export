@@ -40,6 +40,20 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     [self.manager updateFrame];
+    // Duo fold: the overlay window follows the scene bounds on every
+    // layout pass, but nothing else in the plugin hears about it — a
+    // portrait->portrait fold fires no orientation notification.
+    // Broadcast the size change so FMManager (draw / buildPanel /
+    // settings window) refreshes on fold. Gated on an actual bounds
+    // change so this does not spam on every layout pass.
+    static CGRect lastBounds = {{0, 0}, {0, 0}};
+    CGRect b = self.view.bounds;
+    if(b.size.width > 0 && b.size.height > 0 &&
+       (fabs(b.size.width - lastBounds.size.width) > 1.0 ||
+        fabs(b.size.height - lastBounds.size.height) > 1.0)) {
+        lastBounds = b;
+        [NSNotificationCenter.defaultCenter postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification" object:nil];
+    }
 }
 @end
 
