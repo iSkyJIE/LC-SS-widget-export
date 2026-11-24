@@ -15,11 +15,6 @@
 @property(nonatomic) CGRect originalFrame;
 @property(nonatomic) UIBarButtonItem *maximizeButton;
 @property(nonatomic) bool isAppTerminationRequested;
-// Duo fold: container width the floating window was last sized for.
-// updateWindowedFrameWithSettings re-runs the proportional sizing when
-// this changes (fold/unfold), so the window follows the display instead
-// of keeping the size it was created with.
-@property(nonatomic) CGFloat lastContainerWidth;
 @end
 
 @implementation DecoratedAppSceneViewController
@@ -116,7 +111,6 @@
     if(containerSize.width <= 0 || containerSize.height <= 0) {
         containerSize = UIScreen.mainScreen.bounds.size;
     }
-    _lastContainerWidth = containerSize.width;
     CGFloat contentWidth;
     CGFloat contentHeight;
     if(isLandscape) {
@@ -597,31 +591,6 @@
     CGRect maxFrame = UIEdgeInsetsInsetRect(self.view.window.frame, safeAreaInsets);
     settings.peripheryInsets = UIEdgeInsetsZero;
     settings.safeAreaInsetsPortrait = UIEdgeInsetsZero;
-
-    // During a fold transition UIKit can briefly report invalid geometry;
-    // never compute a frame from a zero-size container (it would poison
-    // originalFrame with inf/NaN and lose the window).
-    if(maxFrame.size.width <= 0 || maxFrame.size.height <= 0) return;
-    // Duo fold: the container changed size since this window was created,
-    // so re-run the proportional sizing from setupDecoratedView instead
-    // of keeping the creation size. A manual user resize is preserved
-    // because the container width is unchanged in that case.
-    CGFloat containerW = self.view.window.bounds.size.width;
-    if(containerW <= 0) containerW = maxFrame.size.width;
-    if(_lastContainerWidth > 0 && fabs(containerW - _lastContainerWidth) > 1.0) {
-        BOOL isLandscape = UIInterfaceOrientationIsLandscape(UIApp.statusBarOrientation);
-        CGFloat contentWidth, contentHeight;
-        if(isLandscape) {
-            contentWidth = MIN(560, MAX(360, containerW * 0.62));
-            contentHeight = contentWidth * 0.66;
-        } else {
-            contentWidth = MIN(480, MAX(280, containerW * 0.68));
-            contentHeight = contentWidth * 1.5;
-        }
-        CGFloat navBarHeight = self.navigationBar.frame.size.height > 0 ? self.navigationBar.frame.size.height : 44;
-        self.originalFrame = CGRectMake(self.originalFrame.origin.x, self.originalFrame.origin.y, contentWidth, contentHeight + navBarHeight);
-        _lastContainerWidth = containerW;
-    }
     
     CGRect newFrame = CGRectMake(self.originalFrame.origin.x * maxFrame.size.width, self.originalFrame.origin.y * maxFrame.size.height, self.originalFrame.size.width, self.originalFrame.size.height);
     CGPoint center = self.view.center;
@@ -639,8 +608,6 @@
 - (void)updateOriginalFrame {
     if(_isMaximized) return;
     CGRect maxFrame = UIEdgeInsetsInsetRect(self.view.window.frame, self.view.window.safeAreaInsets);
-    // Skip transient invalid geometry during a fold (see above).
-    if(maxFrame.size.width <= 0 || maxFrame.size.height <= 0) return;
     // save origin as normalized coordinates
     self.originalFrame = CGRectMake(self.view.frame.origin.x / maxFrame.size.width, self.view.frame.origin.y / maxFrame.size.height, self.view.frame.size.width, self.view.frame.size.height);
 }
