@@ -58,6 +58,22 @@ grep -Fq 'launchToGuestAppWithURL:' "$ROOT/LCOrbit/Core/LCOrbitGuestService.m"
 grep -Fq 'LCOpenSideStore' "$ROOT/LCOrbit/Core/LCOrbitGuestService.m"
 # Assert the dangerous regression patterns from the review stay fixed.
 grep -Fq 'if(created) _window.hidden=NO' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
+# Foldable displays: orientation repair must use the active UIWindowScene geometry,
+# never UIScreen.mainScreen.bounds shared across independently sized scenes.
+python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
+from pathlib import Path
+import sys
+source=Path(sys.argv[1]).read_text()
+start=source.index("static void FMEnsureWindowOrientationLayout(void) {")
+end=source.index("\\n}\\n\\n@interface UIWindow (FMOrientationLayout)",start)
+body=source[start:end]
+assert "scene.coordinateSpace.bounds" in body
+assert "scene.windows" in body
+assert "window.frame=sceneFrame" in body
+assert "UIScreen.mainScreen.bounds" not in body
+assert "UIDevice.currentDevice.orientation" not in body
+print("Foldable scene geometry checks: PASS")
+PY
 # The developer-only tweak-to-host option should display an overlay in LC UI
 # without loosening the existing Guest, SideStore, or LiveProcess exclusions.
 grep -Fq '+ (BOOL)isHostUI' "$ROOT/LCOrbit/Core/LCOrbitHost.m"
