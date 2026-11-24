@@ -1466,81 +1466,62 @@ static void FMHookAppDelegate(id<UIApplicationDelegate> delegate) {
 
 static void FMEnsureWindowOrientationLayout(void) {
     if(!BoolPref(@"unlockOrientation", YES)) return;
+    // UIKit geometry belongs to a UIWindowScene, not to the physical screen.
+    // On foldable/dual-display devices the active scene can change size while
+    // UIScreen.mainScreen.bounds continues to describe a different display area.
+    if(!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ FMEnsureWindowOrientationLayout(); });
+        return;
+    }
     static BOOL isEnsuring = NO;
     if(isEnsuring) return;
     isEnsuring = YES;
-    
+
     @try {
-        UIScreen *screen = UIScreen.mainScreen;
-        if(!screen) { isEnsuring = NO; return; }
-        CGSize screenSize = screen.bounds.size;
-        CGFloat portraitW = MIN(screenSize.width, screenSize.height);
-        CGFloat portraitH = MAX(screenSize.width, screenSize.height);
-        
-        BOOL isLandscape = NO;
-        BOOL allowRightLandscape = !BoolPref(@"lockBanRightLandscape", YES);
-        if(@available(iOS 13.0, *)) {
-            for(UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-                if([s isKindOfClass:UIWindowScene.class] && s.activationState == UISceneActivationStateForegroundActive) {
-                    UIInterfaceOrientation orient = ((UIWindowScene *)s).interfaceOrientation;
-                    if(orient == UIInterfaceOrientationLandscapeRight || (allowRightLandscape && orient == UIInterfaceOrientationLandscapeLeft)) {
-                        isLandscape = YES;
-                        break;
+        UIApplication *application=UIApplication.sharedApplication;
+        if(@available(iOS 13.0,*)) {
+            for(UIScene *candidate in application.connectedScenes) {
+                if(![candidate isKindOfClass:UIWindowScene.class]) continue;
+                UIWindowScene *scene=(UIWindowScene *)candidate;
+                if(scene.activationState!=UISceneActivationStateForegroundActive) continue;
+                UIInterfaceOrientation orientation=scene.interfaceOrientation;
+                if(!UIInterfaceOrientationIsLandscape(orientation)) continue;
+
+                // Use each scene's own coordinate space. Never apply one
+                // display's dimensions to windows hosted by another scene.
+                CGRect sceneFrame=scene.coordinateSpace.bounds;
+                if(!isfinite(sceneFrame.origin.x) || !isfinite(sceneFrame.origin.y) ||
+                   !isfinite(sceneFrame.size.width) || !isfinite(sceneFrame.size.height) ||
+                   sceneFrame.size.width<=0 || sceneFrame.size.height<=0) continue;
+                CGRect sceneBounds=CGRectMake(0,0,sceneFrame.size.width,sceneFrame.size.height);
+
+                for(UIWindow *window in scene.windows) {
+                    if(window.windowLevel>=UIWindowLevelAlert) continue;
+                    if([window isKindOfClass:NSClassFromString(@"LCOrbitOverlayWindow")]) continue;
+                    BOOL frameChanged=!CGRectEqualToRect(window.frame,sceneFrame);
+                    BOOL boundsChanged=!CGRectEqualToRect(window.bounds,sceneBounds);
+                    if(!frameChanged && !boundsChanged) continue;
+
+                    if(frameChanged) window.frame=sceneFrame;
+                    if(boundsChanged) window.bounds=sceneBounds;
+                    UIViewController *root=window.rootViewController;
+                    if(root && root.isViewLoaded) {
+                        if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
+                        if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
+                        if(!CGRectEqualToRect(root.view.bounds,sceneBounds)) {
+                            root.view.frame=sceneBounds;
+                            root.view.bounds=sceneBounds;
+                            [root.view setNeedsLayout];
+                        }
                     }
                 }
             }
         }
-        if(!isLandscape) {
-            UIDeviceOrientation dev = UIDevice.currentDevice.orientation;
-            if(dev == UIDeviceOrientationLandscapeLeft || (allowRightLandscape && dev == UIDeviceOrientationLandscapeRight)) {
-                isLandscape = YES;
-            }
-        }
-        
-        // 关键防护：竖屏状态下（包括应用启动）绝对不干涉 Window 布局，直接返回，杜绝死循环
-        if(!isLandscape) {
-            isEnsuring = NO;
-            return;
-        }
-        
-        CGRect targetBounds = CGRectMake(0, 0, portraitH, portraitW);
-        CGFloat targetW = targetBounds.size.width;
-        CGFloat targetH = targetBounds.size.height;
-        
-        NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
-        if(@available(iOS 13.0, *)) {
-            for(UIScene *s in UIApplication.sharedApplication.connectedScenes) {
-                if([s isKindOfClass:UIWindowScene.class]) {
-                    [windows addObjectsFromArray:((UIWindowScene *)s).windows];
-                }
-            }
-        }
-        if(windows.count == 0) {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            [windows addObjectsFromArray:UIApplication.sharedApplication.windows];
-#pragma clang diagnostic pop
-        }
-        
-        for(UIWindow *w in windows) {
-            if(w.windowLevel >= UIWindowLevelAlert) continue;
-            if([w isKindOfClass:NSClassFromString(@"LCOrbitOverlayWindow")]) continue;
-            if(fabs(w.bounds.size.width - targetW) > 1.0 || fabs(w.bounds.size.height - targetH) > 1.0) {
-                w.frame = targetBounds;
-                w.bounds = targetBounds;
-                UIViewController *root = w.rootViewController;
-                if(root && root.isViewLoaded) {
-                    if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
-                    if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
-                    root.view.frame = targetBounds;
-                    root.view.bounds = targetBounds;
-                    [root.view setNeedsLayout];
-                }
-            }
-        }
-    } @catch(NSException *e) {
+    } @catch(NSException *exception) {
+        // A transient scene transition must not prevent UIKit from laying out
+        // the next frame. The next scene/layout callback retries with fresh bounds.
     }
-    
+
     isEnsuring = NO;
 }
 
