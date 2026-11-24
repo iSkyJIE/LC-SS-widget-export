@@ -1375,13 +1375,35 @@ static UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewControlle
 }
 - (UIInterfaceOrientation)fm_preferredInterfaceOrientationForPresentation {
     if(BoolPref(@"unlockOrientation", YES)) {
-        UIDeviceOrientation dev = UIDevice.currentDevice.orientation;
-        if(dev == UIDeviceOrientationLandscapeLeft) {
-            return UIInterfaceOrientationLandscapeRight;
+        // Prefer the guest controller's actual scene orientation. On foldable
+        // devices the inner display can be landscape while the physical-device
+        // orientation sensor still reports face-up/unknown during cold launch.
+        UIWindowScene *scene=self.viewIfLoaded.window.windowScene;
+        if(@available(iOS 13.0,*)) {
+            if(!scene) {
+                for(UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
+                    if([candidate isKindOfClass:UIWindowScene.class] &&
+                       candidate.activationState==UISceneActivationStateForegroundActive) {
+                        scene=(UIWindowScene *)candidate;
+                        break;
+                    }
+                }
+            }
+            if(scene) {
+                UIInterfaceOrientation current=scene.interfaceOrientation;
+                if(current==UIInterfaceOrientationPortrait ||
+                   current==UIInterfaceOrientationLandscapeRight ||
+                   (!BoolPref(@"lockBanRightLandscape",YES) &&
+                    current==UIInterfaceOrientationLandscapeLeft)) {
+                    return current;
+                }
+            }
         }
-        if(!BoolPref(@"lockBanRightLandscape", YES) && dev == UIDeviceOrientationLandscapeRight) {
-            return UIInterfaceOrientationLandscapeLeft;
-        }
+        // Sensor fallback is only used before UIKit has attached a scene.
+        UIDeviceOrientation dev=UIDevice.currentDevice.orientation;
+        if(dev==UIDeviceOrientationLandscapeLeft) return UIInterfaceOrientationLandscapeRight;
+        if(!BoolPref(@"lockBanRightLandscape",YES) &&
+           dev==UIDeviceOrientationLandscapeRight) return UIInterfaceOrientationLandscapeLeft;
         return UIInterfaceOrientationPortrait;
     }
     return [self fm_preferredInterfaceOrientationForPresentation];
@@ -1511,11 +1533,11 @@ static void FMEnsureWindowOrientationLayout(void) {
                     if(root && root.isViewLoaded) {
                         if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
                         if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
-                        if(!CGRectEqualToRect(root.view.bounds,sceneBounds)) {
-                            root.view.frame=sceneBounds;
-                            root.view.bounds=sceneBounds;
-                            [root.view setNeedsLayout];
-                        }
+                        // Let UIKit size the guest root view through its normal
+                        // window/layout lifecycle. Mutating root view frame and
+                        // bounds here can interrupt a cold-launch snapshot or
+                        // the guest app's first orientation transition.
+                        [root.view setNeedsLayout];
                     }
                 }
             }
