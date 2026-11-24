@@ -97,7 +97,16 @@
 - (void)setupDecoratedView {
     CGFloat navBarHeight = 44;
     BOOL isLandscape = UIInterfaceOrientationIsLandscape(UIApp.statusBarOrientation);
-    CGRect frame = CGRectMake(0, 0, isLandscape ? 480 : 320, (isLandscape ? 320 : 480) + navBarHeight);
+    // Duo: size the floating window from the live container instead of the
+    // old fixed 320x480 / 480x320. Folded that reproduces the old size;
+    // unfolded it grows with the inner display instead of sitting in it
+    // as a small island. The navigation bar height is added on top, as before.
+    CGSize containerSize = self.view.window.bounds.size;
+    if(containerSize.width <= 0 || containerSize.height <= 0) {
+        containerSize = UIScreen.mainScreen.bounds.size;
+    }
+    CGSize contentSize = [LCDuoGeometry initialDecoratedWindowSizeForContainerSize:containerSize landscape:isLandscape];
+    CGRect frame = CGRectMake(0, 0, contentSize.width, contentSize.height + navBarHeight);
     CGPoint rootViewCenter = self.view.superview.center;
     frame.origin = CGPointMake(rootViewCenter.x - frame.size.width / 2, rootViewCenter.y - frame.size.height / 2);
     

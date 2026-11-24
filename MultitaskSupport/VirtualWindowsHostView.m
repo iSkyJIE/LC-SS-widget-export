@@ -6,10 +6,18 @@
 //
 #import "DecoratedAppSceneViewController.h"
 #import "VirtualWindowsHostView.h"
+#import "LiveContainerSwiftUI-Swift.h"
 
 @implementation VirtualWindowsHostView
 - (instancetype)init {
-    CGRect frame = ((UIWindowScene *)UIApplication.sharedApplication.connectedScenes.anyObject).keyWindow.bounds;
+    // Duo: connectedScenes.anyObject may be the wrong scene once there is
+    // more than one (multitask, outer/inner transition). Take the
+    // foreground-active scene's key window instead.
+    UIWindow *keyWindow = [LCDuoGeometry keyWindow];
+    CGRect frame = keyWindow.bounds;
+    if(frame.size.width <= 0 || frame.size.height <= 0) {
+        frame = UIScreen.mainScreen.bounds;
+    }
     self = [super initWithFrame:frame];
     self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.shouldForwardTapAction = YES;

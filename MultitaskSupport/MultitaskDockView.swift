@@ -270,7 +270,15 @@ class AppInfoProvider {
     }
 
     public var keyWindow: UIWindow? {
-        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first
+        // Duo: never assume the first scene is the visible one. The
+        // foreground-active scene is the one the user is folding.
+        LCDuoGeometry.keyWindow()
+    }
+
+    /// Window bounds with a screen fallback, so a fold that happens while
+    /// no window is key yet cannot crash the dock on a force-unwrap.
+    public var keyWindowBounds: CGRect {
+        keyWindow?.bounds ?? UIScreen.main.bounds
     }
 
     public var safeAreaInsets: UIEdgeInsets {
@@ -281,12 +289,13 @@ class AppInfoProvider {
     }
 
     private var safeAreaHeight: CGFloat {
-        keyWindow!.bounds.height - safeAreaInsets.top - safeAreaInsets.bottom
+        guard let window = keyWindow else { return 0 }
+        return window.bounds.height - safeAreaInsets.top - safeAreaInsets.bottom
     }
     
     override init() {
         super.init()
-        keyWindow!.rootViewController!.view.subviews.first!.addSubview(self.windowHostingView)
+        attachHostingViewIfNeeded()
         setupDockView()
         NotificationCenter.default.addObserver(
             self,
@@ -335,10 +344,26 @@ class AppInfoProvider {
         }
     }
 
-    private func updateDockFrame(animated: Bool = true) {
+    /// Attach the virtual-windows host view once a key window exists.
+    /// Retried from updateDockFrame, so a dock created before the first
+    /// window appears (or after a fold rebuilds the scene) still attaches
+    /// instead of crashing on the old force-unwrapped chain.
+    private func attachHostingViewIfNeeded() {
+        guard windowHostingView.superview == nil,
+              let rootView = keyWindow?.rootViewController?.view,
+              let container = rootView.subviews.first else { return }
+        container.addSubview(windowHostingView)
+    }
+
+    /// Called from the SwiftUI dock view when the scene size changes
+    /// (fold / unfold / split resize). Rotation alone already arrives via
+    /// UIDevice.orientationDidChangeNotification; a fold does not change
+    /// the orientation, so this is the path that catches it.
+    func updateDockFrame(animated: Bool = true) {
+        attachHostingViewIfNeeded()
         guard let hostingController = hostingController else { return }
 
-        let screenBounds = keyWindow!.bounds
+        let screenBounds = keyWindowBounds
         let currentDockWidth = self.dockWidth
         
         let dockHeight = calculateTargetDockHeight(forWidth: currentDockWidth)
@@ -506,7 +531,7 @@ class AppInfoProvider {
                 let finalScale = Constants.initialScale
                 hostingController.view.transform = CGAffineTransform(scaleX: finalScale, y: finalScale)
                 // Move off-screen to hide, but keep in view hierarchy
-                let screenBounds = self.keyWindow!.bounds
+                let screenBounds = self.keyWindowBounds
                 let currentDockWidth = self.dockWidth
                 let targetX = self.calculateTargetX(isDockHidden: true, isOnRightSide: hostingController.view.frame.midX > screenBounds.width / 2, dockWidth: currentDockWidth, screenWidth: screenBounds.width)
                 let targetY = hostingController.view.frame.origin.y // Keep current Y
@@ -541,7 +566,7 @@ class AppInfoProvider {
     }
 
     func handleSwipeToHideOrShowGesture(for originalFrame: CGRect, translation: CGSize) -> Bool {
-        let screenWidth = keyWindow!.bounds.width
+        let screenWidth = keyWindowBounds.width
         let isOnRightSide = originalFrame.origin.x > screenWidth / 2
         let isSwipingAway = (isOnRightSide && translation.width > 0) || (!isOnRightSide && translation.width < 0)
         
@@ -569,7 +594,7 @@ class AppInfoProvider {
             return false
         }
         
-        let screenWidth = keyWindow!.bounds.width
+        let screenWidth = keyWindowBounds.width
         let isOnRightSide = originalFrame.origin.x > screenWidth / 2
         
         guard !self.isDockHidden else { return false }
@@ -589,7 +614,7 @@ class AppInfoProvider {
     
     // Find and bring corresponding multitask view to front
     func bringMultitaskViewToFront(uuid: String, from center: CGPoint? = nil) -> Bool {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else {
+        guard let windowScene = LCDuoGeometry.keyWindowScene() else {
             return false
         }
 
@@ -772,7 +797,7 @@ class AppInfoProvider {
     
     // Add edge gesture recognition areas when dock is hidden
     private func setupEdgeGestureRecognizers() {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+        guard let windowScene = LCDuoGeometry.keyWindowScene(),
               let keyWindow = windowScene.windows.first else { return }
         
         keyWindow.gestureRecognizers?.removeAll { gesture in
@@ -870,6 +895,12 @@ public struct MultitaskDockSwiftView: View {
             .opacity(dockManager.isDockHidden ? (hideCollapsedDock && dockManager.isCollapsed ? 0.01 : 0.4) : 1.0)
             .offset(dragOffset)
             .position(x: g.size.width / 2, y: g.size.height / 2)
+            .onChange(of: g.size) { _ in
+                // Fold / unfold / split resize: the scene size changes
+                // without an orientation change, so rotation observers
+                // never fire. Re-seat the dock on the new geometry.
+                dockManager.updateDockFrame(animated: false)
+            }
         }
 
 
@@ -889,7 +920,7 @@ public struct MultitaskDockSwiftView: View {
                 let currentPhysicalFrame = hcFrame.offsetBy(dx: self.dragOffset.width, dy: self.dragOffset.height)
                 
                 if dockManager.isPositionChangeGesture(for: hcFrame, translation: value.translation) {
-                    let screenBounds = dockManager.keyWindow!.bounds
+                    let screenBounds = dockManager.keyWindowBounds
                     let targetX = dockManager.calculateTargetX(isDockHidden: false, isOnRightSide: currentPhysicalFrame.midX > screenBounds.width / 2, dockWidth: dockManager.dockWidth, screenWidth: screenBounds.width)
                     
                     let safeAreaInsets = dockManager.safeAreaInsets
@@ -931,7 +962,7 @@ public struct MultitaskDockSwiftView: View {
                     return
                 }
                 
-                let screenBounds = dockManager.keyWindow!.bounds
+                let screenBounds = dockManager.keyWindowBounds
                 let safeAreaInsets = dockManager.safeAreaInsets
                 let dockVerticalMargin = MultitaskDockManager.Constants.dockVerticalMargin
                 let minY = safeAreaInsets.top + dockVerticalMargin
