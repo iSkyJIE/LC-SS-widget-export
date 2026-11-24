@@ -1497,13 +1497,57 @@ static void FMEnsureWindowOrientationLayout(void) {
             }
         }
         
-        // 关键防护：竖屏状态下（包括应用启动）绝对不干涉 Window 布局，直接返回，杜绝死循环
+        // Duo / fold: portrait is no longer one fixed size. The outer display
+        // (~466x678pt) and the unfolded inner display (~626x890pt) are both
+        // portrait, so a fold changes the size without changing the
+        // orientation — and the old code returned here without doing
+        // anything, leaving guest windows at the folded size. Resize only
+        // windows that still match the previous portrait size (i.e. windows
+        // that were full-screen before the fold); anything else — a
+        // multitask window, PiP, a settings window — is left alone.
+        // The first call only records the size and returns, so startup
+        // behaviour is unchanged. Size comparison makes repeated calls
+        // no-ops, so layoutSubviews cannot loop here.
+        static CGSize lastPortraitSize = {0, 0};
+        BOOL portraitOnlyMatching = NO;
+        CGSize oldPortrait = CGSizeZero;
         if(!isLandscape) {
-            isEnsuring = NO;
-            return;
+            CGSize currentPortrait = CGSizeZero;
+            if(@available(iOS 13.0, *)) {
+                for(UIScene *s in UIApplication.sharedApplication.connectedScenes) {
+                    if([s isKindOfClass:UIWindowScene.class] && s.activationState == UISceneActivationStateForegroundActive) {
+                        CGRect b = ((UIWindowScene *)s).coordinateSpace.bounds;
+                        currentPortrait = CGSizeMake(MIN(b.size.width, b.size.height), MAX(b.size.width, b.size.height));
+                        break;
+                    }
+                }
+            }
+            if(currentPortrait.width <= 0) currentPortrait = CGSizeMake(portraitW, portraitH);
+            if(lastPortraitSize.width <= 0) {
+                lastPortraitSize = currentPortrait;
+                isEnsuring = NO;
+                return;
+            }
+            if(fabs(currentPortrait.width - lastPortraitSize.width) <= 1.0 &&
+               fabs(currentPortrait.height - lastPortraitSize.height) <= 1.0) {
+                isEnsuring = NO;
+                return;
+            }
+            oldPortrait = lastPortraitSize;
+            lastPortraitSize = currentPortrait;
+            portraitOnlyMatching = YES;
+            portraitW = currentPortrait.width;
+            portraitH = currentPortrait.height;
+        } else {
+            lastPortraitSize = CGSizeMake(portraitW, portraitH);
         }
-        
-        CGRect targetBounds = CGRectMake(0, 0, portraitH, portraitW);
+
+        CGRect targetBounds;
+        if(portraitOnlyMatching) {
+            targetBounds = CGRectMake(0, 0, portraitW, portraitH);
+        } else {
+            targetBounds = CGRectMake(0, 0, portraitH, portraitW);
+        }
         CGFloat targetW = targetBounds.size.width;
         CGFloat targetH = targetBounds.size.height;
         
@@ -1525,6 +1569,11 @@ static void FMEnsureWindowOrientationLayout(void) {
         for(UIWindow *w in windows) {
             if(w.windowLevel >= UIWindowLevelAlert) continue;
             if([w isKindOfClass:NSClassFromString(@"LCOrbitOverlayWindow")]) continue;
+            // Duo fold: only full-screen portrait windows move; a window
+            // that was already a different size belongs to something else.
+            if(portraitOnlyMatching &&
+               (fabs(w.bounds.size.width - oldPortrait.width) > 1.0 ||
+                fabs(w.bounds.size.height - oldPortrait.height) > 1.0)) continue;
             if(fabs(w.bounds.size.width - targetW) > 1.0 || fabs(w.bounds.size.height - targetH) > 1.0) {
                 w.frame = targetBounds;
                 w.bounds = targetBounds;
@@ -4238,7 +4287,10 @@ static void FMDrawAppIcon(UIView *box,NSDictionary *app,CGFloat size,BOOL curren
     // Keep the 63pt logical row hit region even when users choose 50% visual scale.
     UIEdgeInsets safe=self.window.safeAreaInsets;
     CGFloat usableWidth=bounds.size.width-safe.left-safe.right;
-    CGFloat pw=MIN(small?(compact?76:240):346,usableWidth-24);
+    // Duo: on the unfolded inner display (~626pt wide) the drawer can be
+    // a little wider than the 346pt phone width; folded (~466pt) it stays.
+    CGFloat drawerWidth=bounds.size.width>=600?380:346;
+    CGFloat pw=MIN(small?(compact?76:240):drawerWidth,usableWidth-24);
     if(pw<=0) return;
     // A real side drawer: apps and actions share one continuous vertical
     // capsule. Heights depend on the number of visible guests and footer keys.
