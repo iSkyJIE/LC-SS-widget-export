@@ -1468,7 +1468,7 @@ static void FMEnsureWindowOrientationLayout(void) {
     if(!BoolPref(@"unlockOrientation", YES)) return;
     // UIKit geometry belongs to a UIWindowScene, not to the physical screen.
     // On foldable/dual-display devices the active scene can change size while
-    // UIScreen.mainScreen.bounds continues to describe a different display area.
+    // A global display rectangle may describe a different screen than this scene.
     if(!NSThread.isMainThread) {
         dispatch_async(dispatch_get_main_queue(), ^{ FMEnsureWindowOrientationLayout(); });
         return;
