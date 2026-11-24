@@ -1533,11 +1533,38 @@ static void FMEnsureWindowOrientationLayout(void) {
                     if(root && root.isViewLoaded) {
                         if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
                         if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
-                        // Let UIKit size the guest root view through its normal
-                        // window/layout lifecycle. Mutating root view frame and
-                        // bounds here can interrupt a cold-launch snapshot or
-                        // the guest app's first orientation transition.
-                        [root.view setNeedsLayout];
+                        // Do not resize a Guest root view inside the launch/layout
+                        // callback: UIKit may still be presenting its launch snapshot.
+                        // Once the app is active, repair a stale root-view size on the
+                        // next main-queue turn so the Guest content fills the new scene.
+                        if(!CGRectEqualToRect(root.view.bounds,window.bounds)) {
+                            __weak UIWindow *weakWindow=window;
+                            __weak UIWindowScene *weakScene=scene;
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                UIWindow *target=weakWindow;
+                                UIWindowScene *targetScene=weakScene;
+                                if(!target || !targetScene || target.windowScene!=targetScene ||
+                                   target.hidden || UIApplication.sharedApplication.applicationState!=UIApplicationStateActive)
+                                    return;
+                                UIViewController *targetRoot=target.rootViewController;
+                                if(!targetRoot || !targetRoot.isViewLoaded ||
+                                   [targetRoot isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")] ||
+                                   [targetRoot isKindOfClass:NSClassFromString(@"FMSettingsRootController")])
+                                    return;
+                                CGRect targetBounds=target.bounds;
+                                if(!isfinite(targetBounds.size.width) || !isfinite(targetBounds.size.height) ||
+                                   targetBounds.size.width<=0 || targetBounds.size.height<=0)
+                                    return;
+                                if(!CGRectEqualToRect(targetRoot.view.bounds,targetBounds)) {
+                                    targetRoot.view.frame=targetBounds;
+                                    targetRoot.view.bounds=CGRectMake(0,0,targetBounds.size.width,targetBounds.size.height);
+                                    [targetRoot.view setNeedsLayout];
+                                    [targetRoot.view layoutIfNeeded];
+                                }
+                            });
+                        } else {
+                            [root.view setNeedsLayout];
+                        }
                     }
                 }
             }
