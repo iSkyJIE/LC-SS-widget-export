@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: floating-menu-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref_name, 'fix/iphone-duo-') }}
+  queue: max
 
 jobs:
   build:
