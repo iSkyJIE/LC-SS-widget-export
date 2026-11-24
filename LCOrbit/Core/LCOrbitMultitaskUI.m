@@ -74,7 +74,7 @@ BOOL OrbitMethodMatches(Class cls, NSString *name, const char *result, NSArray<N
 @end
 
 static char SnapshotKey, ConstraintsKey, HostingPlacementKey, GeometryLogKey, ViewportReadyKey;
-static char UIKitSyncSignatureKey, UIKitSyncPendingKey;
+static char UIKitSyncSignatureKey, UIKitSyncPendingKey, AppliedGeometrySignatureKey;
 static Class WindowClass, DockClass;
 static IMP OriginalInit, OriginalSetup, OriginalVertical, OriginalFrame;
 static IMP OriginalSafeArea, OriginalSettings, OriginalExit, OriginalInitialized;
@@ -524,6 +524,27 @@ static NSString *UIKitGeometrySignature(UIViewController *window) {
         host,NSStringFromCGRect(frame),(long)orientation,NSStringFromUIEdgeInsets(insets),
         NSStringFromCGRect(bar?bar.statusBarFrame:CGRectZero),bar?bar.statusBarHidden:YES];
 }
+// Duo fold: signature of the last geometry actually applied to the remote
+// scene, per window. UpdateScene is called from the didUpdateFromSettings:
+// hook, and every transaction it starts comes back as another
+// didUpdateFromSettings: — with no "nothing changed" guard the two sides
+// ping-pong FBScene transactions whenever the resolved insets flip between
+// two values (HostedSafeArea's hosting-viewport vs host-fallback). FBScene's
+// own dedup is the only other brake and cannot be relied on here.
+static NSString *AppliedGeometrySignature(CGRect frame,UIInterfaceOrientation orientation,UIEdgeInsets insets,NSInteger style,NSInteger deviceOrientation) {
+    return [NSString stringWithFormat:@"frame=%@ orientation=%ld insets=%@ style=%ld devOrient=%ld",
+        NSStringFromCGRect(frame),(long)orientation,NSStringFromUIEdgeInsets(insets),(long)style,(long)deviceOrientation];
+}
+// Returns YES when this exact geometry (plus relayed values) was already
+// applied — the caller must skip its transaction. Otherwise records the
+// new signature and returns NO.
+static BOOL GeometryAlreadyApplied(UIViewController *window,CGRect frame,UIInterfaceOrientation orientation,UIEdgeInsets insets,NSInteger style,NSInteger deviceOrientation) {
+    NSString *signature=AppliedGeometrySignature(frame,orientation,insets,style,deviceOrientation);
+    NSString *previous=objc_getAssociatedObject(window,&AppliedGeometrySignatureKey);
+    if([previous isEqualToString:signature]) return YES;
+    objc_setAssociatedObject(window,&AppliedGeometrySignatureKey,signature,OBJC_ASSOCIATION_COPY_NONATOMIC);
+    return NO;
+}
 static void UpdateScene(UIViewController *window,id baseSettings) {
     if(!NSThread.isMainThread || OrbitPiPProtectedWindow(window)) return;
     LayoutFullscreen(window);
@@ -539,6 +560,12 @@ static void UpdateScene(UIViewController *window,id baseSettings) {
        [objc_getAssociatedObject(window,&ViewportReadyKey) boolValue])
         objc_setAssociatedObject(window,&UIKitSyncSignatureKey,
             UIKitGeometrySignature(window),OBJC_ASSOCIATION_COPY_NONATOMIC);
+    // Duo fold: skip the FBScene transaction when nothing changed. The
+    // relayed style/device orientation are part of the signature so a real
+    // appearance change still goes out.
+    NSInteger relayStyle = baseSettings ? (NSInteger)[baseSettings userInterfaceStyle] : -1;
+    NSInteger relayDeviceOrientation = baseSettings ? (NSInteger)[baseSettings deviceOrientation] : (NSInteger)UIDevice.currentDevice.orientation;
+    if(GeometryAlreadyApplied(window,frame,orientation,insets,relayStyle,relayDeviceOrientation)) return;
     __weak UIViewController *weakWindow=window;
     [(id)scene updateSettingsWithBlock:^(id settings) {
         UIViewController *strongWindow=weakWindow;
@@ -686,6 +713,7 @@ static void RestoreAppearance(UIViewController *window) {
     objc_setAssociatedObject(window,&ViewportReadyKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(window,&UIKitSyncSignatureKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(window,&UIKitSyncPendingKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(window,&AppliedGeometrySignatureKey,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     PositionHostingView(window,NO);
     [NSLayoutConstraint deactivateConstraints:[(id)window activatedVerticalConstraints]?:@[]];
     [(id)window setActivatedVerticalConstraints:@[]];
