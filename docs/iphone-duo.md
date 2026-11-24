@@ -84,15 +84,7 @@
   的全屏窗口” resize 到新尺寸，多任务窗口、PiP、设置窗口一律不动；
   首次调用只记录不改，保证启动行为不变；尺寸比较让重复调用都是 no-op，
   `layoutSubviews` 不会因此死循环。
-  **第二轮修正（2026-11-23，真机仍卡死后查出）：**上面那套逻辑只改了
-  函数内部，折叠时它根本不会被调用——竖屏折叠不改变方向、不发方向
-  通知，而唯一的通用触发点 `UIWindow.fm_layoutSubviews` 只在横屏才
-  调用它。所以改成每次窗口布局都跑一次 ensure（无变化时 no-op，
-  有重入保护，不会循环）。另外悬浮 Guest 窗口本身只在创建时按比例
-  定尺寸，`DecoratedAppSceneViewController.updateWindowedFrameWithSettings`
-  现在容器宽度变化时也会重算尺寸，并跳过折叠过渡期短暂出现的零尺寸，
-  防止 `originalFrame` 被 inf/NaN 污染导致窗口丢失。
-
+  
 ### 6. 启动屏：不补（已撤回）
 
 仓库里 `UILaunchStoryboardName = LaunchScreen` 一直指向一个不存在的文件，
