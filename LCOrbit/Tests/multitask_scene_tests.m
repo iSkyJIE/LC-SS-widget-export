@@ -260,6 +260,16 @@ int main(void) {
         host.windowScene.statusBarManager.statusBarFrame=CGRectMake(0,0,390,54);host.windowScene.interfaceOrientation=UIInterfaceOrientationPortrait;
         host.safeAreaInsets=(UIEdgeInsets){59,0,34,0};window.view.window=host;
         window.appSceneVC=scene;scene.delegate=window;scene.settings=[OrbitSettings new];
+        scene.view=[UIView new];scene.contentView=[UIView new];
+        scene.view.frame=CGRectMake(0,0,466,0);
+        scene.contentView.frame=CGRectZero;
+        Expect(GuestHostingNeedsLayoutRepair(window),
+            @"mounted Guest presenter with zero-height scene and 0x0 hosting view requests a deferred layout repair");
+        scene.view.frame=CGRectMake(0,0,951,669);
+        scene.contentView.frame=CGRectMake(0,0,951,669);
+        Expect(!GuestHostingNeedsLayoutRepair(window),
+            @"valid dual-display Guest hosting geometry does not trigger redundant repair");
+        scene.view=nil;scene.contentView=nil;
         UIView *root=[UIView new];root.window=host;root.superview=host;
         root.frame=CGRectMake(0,59,390,751);
         CGRect mounted=FullscreenHostingFrame(root,host);
