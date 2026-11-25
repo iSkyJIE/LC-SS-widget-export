@@ -5,7 +5,7 @@ run-name: FloatingMenu ${{ github.ref_type == 'tag' && 'release' || 'build' }} -
 # A semantic-version tag is pushed only when a formal release is requested.
 on:
   push:
-    branches: [lcss-original, feat/uikit-guest-safe-area, fix/iphone-duo-unfolded-lcfloatingmenu-20261124]
+    branches: [lcss-original, feat/uikit-guest-safe-area, fix/iphone-duo-unfolded-lcfloatingmenu-20261124, fix/iphone-duo-plugin-only-20261125]
     tags:
       - '*.*.*'
     paths:
