@@ -79,6 +79,26 @@ PY
 grep -Fq '_lastReportedSceneBounds' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'addObserverForName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+# Inner-display Guest launch: override only LiveContainer's Guest client settings
+# while its own host UI scene is wide. Never request global Scene geometry.
+python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
+from pathlib import Path
+import sys
+source=Path(sys.argv[1]).read_text()
+start=source.index("static BOOL FMIsUnfoldedHostScene(UIWindowScene *scene)")
+end=source.index("static UIInterfaceOrientationMask FMCurrentSupportedOrientations",start)
+body=source[start:end]
+assert "if(!FMHostUI() || !scene) return NO;" in body
+assert "bounds.size.width>bounds.size.height*1.05" in body
+assert 'objc_getClass("AppSceneViewController")' in body
+assert 'objc_getClass("FBSMutableSceneParameters")' in body
+assert 'NSSelectorFromString(@"setUpAppPresenter")' in body
+assert 'NSSelectorFromString(@"updateClientSettingsWithBlock:")' in body
+assert "FMGuestSceneBootstrapDepth" in body
+assert 'NSSelectorFromString(@"setInterfaceOrientation:")' in body
+assert "requestGeometryUpdateWithPreferences" not in body
+print("Folded outer display isolation / unfolded Guest bootstrap checks: PASS")
+PY
 # Guest cold launch on foldable inner displays: use scene orientation first,
 # then repair a stale root-view size only after the app is active.
 python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
