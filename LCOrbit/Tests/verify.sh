@@ -79,47 +79,25 @@ PY
 grep -Fq '_lastReportedSceneBounds' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'addObserverForName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
-# Inner-display Guest launch: override only LiveContainer's Guest client settings
-# while its own host UI scene is wide. Never request global Scene geometry.
-python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
-from pathlib import Path
-import sys
-source=Path(sys.argv[1]).read_text()
-start=source.index("static BOOL FMIsUnfoldedHostScene(UIWindowScene *scene)")
-end=source.index("static UIInterfaceOrientationMask FMCurrentSupportedOrientations",start)
-body=source[start:end]
-assert "if(!FMHostUI() || !scene) return NO;" in body
-assert "bounds.size.width>bounds.size.height*1.05" in body
-assert 'objc_getClass("AppSceneViewController")' in body
-assert 'objc_getClass("FBSMutableSceneParameters")' in body
-assert 'NSSelectorFromString(@"setUpAppPresenter")' in body
-assert 'NSSelectorFromString(@"updateClientSettingsWithBlock:")' in body
-assert "FMGuestSceneBootstrapDepth" in body
-assert 'NSSelectorFromString(@"setInterfaceOrientation:")' in body
-assert "requestGeometryUpdateWithPreferences" not in body
-print("Folded outer display isolation / unfolded Guest bootstrap checks: PASS")
-PY
-# Guest cold launch on foldable inner displays: use scene orientation first,
-# then repair a stale root-view size only after the app is active.
+# Preserve the first device-verified Guest startup path. Do not infer the Guest
+# orientation from a possibly portrait/stale host scene or force a global scene.
 python3 - "$ROOT/LCFloatingMenu/LCFloatingMenu.m" <<'PY'
 from pathlib import Path
 import sys
 source=Path(sys.argv[1]).read_text()
 start=source.index("- (UIInterfaceOrientation)fm_preferredInterfaceOrientationForPresentation {")
-end=source.index("\n}",start)
+end=source.index("\\n- (BOOL)fm_shouldAutorotate {",start)
 body=source[start:end]
-assert "self.viewIfLoaded.window.windowScene" in body
-assert "scene.interfaceOrientation" in body
-assert body.index("scene.interfaceOrientation") < body.index("UIDevice.currentDevice.orientation")
+assert "UIDeviceOrientation dev = UIDevice.currentDevice.orientation" in body
+assert "self.viewIfLoaded.window.windowScene" not in body
+assert "FMGuestSceneBootstrap" not in source
 layout_start=source.index("static void FMEnsureWindowOrientationLayout(void) {")
-layout_end=source.index("\n}",layout_start)
+layout_end=source.index("\\n@interface UIWindow (FMOrientationLayout)",layout_start)
 layout=source[layout_start:layout_end]
-assert "dispatch_async(dispatch_get_main_queue()" in layout
-assert "UIApplicationStateActive" in layout
-assert "targetRoot.view.frame=targetBounds" in layout
-assert "targetRoot.view.bounds=CGRectMake(0,0,targetBounds.size.width,targetBounds.size.height)" in layout
-assert "targetRoot.view layoutIfNeeded" in layout
-print("Foldable guest cold-launch and deferred root-layout checks: PASS")
+assert "root.view.frame=sceneBounds;" in layout
+assert "root.view.bounds=sceneBounds;" in layout
+assert "requestGeometryUpdateWithPreferences" not in source
+print("First verified Guest startup path / no global orientation override: PASS")
 PY
 # The developer-only tweak-to-host option should display an overlay in LC UI
 # without loosening the existing Guest, SideStore, or LiveProcess exclusions.
