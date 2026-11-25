@@ -86,13 +86,13 @@ from pathlib import Path
 import sys
 source=Path(sys.argv[1]).read_text()
 start=source.index("- (UIInterfaceOrientation)fm_preferredInterfaceOrientationForPresentation {")
-end=source.index("\\n- (BOOL)fm_shouldAutorotate {",start)
+end=source.index("\n- (BOOL)fm_shouldAutorotate {",start)
 body=source[start:end]
 assert "UIDeviceOrientation dev = UIDevice.currentDevice.orientation" in body
 assert "self.viewIfLoaded.window.windowScene" not in body
 assert "FMGuestSceneBootstrap" not in source
 layout_start=source.index("static void FMEnsureWindowOrientationLayout(void) {")
-layout_end=source.index("\\n@interface UIWindow (FMOrientationLayout)",layout_start)
+layout_end=source.index("\n@interface UIWindow (FMOrientationLayout)",layout_start)
 layout=source[layout_start:layout_end]
 assert "root.view.frame=sceneBounds;" in layout
 assert "root.view.bounds=sceneBounds;" in layout
