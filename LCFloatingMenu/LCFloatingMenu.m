@@ -1345,76 +1345,7 @@ static void FMEnsureWindowOrientationLayout(void);
 // Its initial client settings currently hard-code Portrait. Only override that
 // one Guest-scene bootstrap when the *host UI scene itself* is already wide.
 // A folded outer display remains portrait and therefore takes the untouched path.
-static NSUInteger FMGuestSceneBootstrapDepth=0;
-static UIInterfaceOrientation FMGuestSceneBootstrapOrientation=UIInterfaceOrientationLandscapeRight;
-static BOOL FMIsUnfoldedHostScene(UIWindowScene *scene) {
-    if(!FMHostUI() || !scene) return NO;
-    CGRect bounds=scene.coordinateSpace.bounds;
-    return isfinite(bounds.size.width) && isfinite(bounds.size.height) &&
-        bounds.size.width>0 && bounds.size.height>0 &&
-        bounds.size.width>bounds.size.height*1.05;
-}
-static UIInterfaceOrientation FMGuestLandscapeOrientation(UIWindowScene *scene) {
-    UIInterfaceOrientation current=scene.interfaceOrientation;
-    if(current==UIInterfaceOrientationLandscapeRight) return current;
-    if(!BoolPref(@"lockBanRightLandscape",YES) &&
-       current==UIInterfaceOrientationLandscapeLeft) return current;
-    return UIInterfaceOrientationLandscapeRight;
-}
-
-@interface UIViewController (FMGuestSceneBootstrap)
-- (void)fm_setUpAppPresenter;
-@end
-@implementation UIViewController (FMGuestSceneBootstrap)
-- (void)fm_setUpAppPresenter {
-    UIWindowScene *hostScene=self.viewIfLoaded.window.windowScene;
-    if(!BoolPref(@"unlockOrientation",YES) || !FMIsUnfoldedHostScene(hostScene)) {
-        [self fm_setUpAppPresenter];
-        return;
-    }
-    UIInterfaceOrientation previous=FMGuestSceneBootstrapOrientation;
-    FMGuestSceneBootstrapOrientation=FMGuestLandscapeOrientation(hostScene);
-    FMGuestSceneBootstrapDepth++;
-    @try {
-        [self fm_setUpAppPresenter];
-    } @finally {
-        FMGuestSceneBootstrapDepth--;
-        FMGuestSceneBootstrapOrientation=previous;
-    }
-}
-@end
-
-@interface NSObject (FMGuestClientSettingsBootstrap)
-- (void)fm_updateClientSettingsWithBlock:(void (^)(id settings))block;
-@end
-@implementation NSObject (FMGuestClientSettingsBootstrap)
-- (void)fm_updateClientSettingsWithBlock:(void (^)(id settings))block {
-    if(FMGuestSceneBootstrapDepth && block) {
-        UIInterfaceOrientation orientation=FMGuestSceneBootstrapOrientation;
-        void (^scopedBlock)(id)=^(id settings) {
-            block(settings);
-            SEL setter=NSSelectorFromString(@"setInterfaceOrientation:");
-            if([settings respondsToSelector:setter])
-                ((void(*)(id,SEL,NSInteger))objc_msgSend)(settings,setter,orientation);
-        };
-        [self fm_updateClientSettingsWithBlock:scopedBlock];
-        return;
-    }
-    [self fm_updateClientSettingsWithBlock:block];
-}
-@end
-
-static void FMInstallFoldableGuestBootstrapHook(void) {
-    // These are LiveContainer host classes. If either is absent, leave the
-    // application untouched rather than applying a process-wide orientation.
-    Class appSceneClass=objc_getClass("AppSceneViewController");
-    Class parametersClass=objc_getClass("FBSMutableSceneParameters");
-    if(!appSceneClass || !parametersClass) return;
-    FMSwizzle(appSceneClass,NSSelectorFromString(@"setUpAppPresenter"),@selector(fm_setUpAppPresenter));
-    FMSwizzle(parametersClass,NSSelectorFromString(@"updateClientSettingsWithBlock:"),@selector(fm_updateClientSettingsWithBlock:));
-}
-
-static UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewController *vc) {
+static UIInterfaceOrientationMask FMCurrentSupportedOrientationsstatic UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewController *vc) {
     if(!BoolPref(@"unlockOrientation", YES)) {
         return UIInterfaceOrientationMaskPortrait;
     }
@@ -1448,35 +1379,13 @@ static UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewControlle
 }
 - (UIInterfaceOrientation)fm_preferredInterfaceOrientationForPresentation {
     if(BoolPref(@"unlockOrientation", YES)) {
-        // Prefer the guest controller's actual scene orientation. On foldable
-        // devices the inner display can be landscape while the physical-device
-        // orientation sensor still reports face-up/unknown during cold launch.
-        UIWindowScene *scene=self.viewIfLoaded.window.windowScene;
-        if(@available(iOS 13.0,*)) {
-            if(!scene) {
-                for(UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
-                    if([candidate isKindOfClass:UIWindowScene.class] &&
-                       candidate.activationState==UISceneActivationStateForegroundActive) {
-                        scene=(UIWindowScene *)candidate;
-                        break;
-                    }
-                }
-            }
-            if(scene) {
-                UIInterfaceOrientation current=scene.interfaceOrientation;
-                if(current==UIInterfaceOrientationPortrait ||
-                   current==UIInterfaceOrientationLandscapeRight ||
-                   (!BoolPref(@"lockBanRightLandscape",YES) &&
-                    current==UIInterfaceOrientationLandscapeLeft)) {
-                    return current;
-                }
-            }
+        UIDeviceOrientation dev = UIDevice.currentDevice.orientation;
+        if(dev == UIDeviceOrientationLandscapeLeft) {
+            return UIInterfaceOrientationLandscapeRight;
         }
-        // Sensor fallback is only used before UIKit has attached a scene.
-        UIDeviceOrientation dev=UIDevice.currentDevice.orientation;
-        if(dev==UIDeviceOrientationLandscapeLeft) return UIInterfaceOrientationLandscapeRight;
-        if(!BoolPref(@"lockBanRightLandscape",YES) &&
-           dev==UIDeviceOrientationLandscapeRight) return UIInterfaceOrientationLandscapeLeft;
+        if(!BoolPref(@"lockBanRightLandscape", YES) && dev == UIDeviceOrientationLandscapeRight) {
+            return UIInterfaceOrientationLandscapeLeft;
+        }
         return UIInterfaceOrientationPortrait;
     }
     return [self fm_preferredInterfaceOrientationForPresentation];
@@ -1606,36 +1515,9 @@ static void FMEnsureWindowOrientationLayout(void) {
                     if(root && root.isViewLoaded) {
                         if([root isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")]) continue;
                         if([root isKindOfClass:NSClassFromString(@"FMSettingsRootController")]) continue;
-                        // Do not resize a Guest root view inside the launch/layout
-                        // callback: UIKit may still be presenting its launch snapshot.
-                        // Once the app is active, repair a stale root-view size on the
-                        // next main-queue turn so the Guest content fills the new scene.
-                        if(!CGRectEqualToRect(root.view.bounds,window.bounds)) {
-                            __weak UIWindow *weakWindow=window;
-                            __weak UIWindowScene *weakScene=scene;
-                            dispatch_async(dispatch_get_main_queue(), ^{
-                                UIWindow *target=weakWindow;
-                                UIWindowScene *targetScene=weakScene;
-                                if(!target || !targetScene || target.windowScene!=targetScene ||
-                                   target.hidden || UIApplication.sharedApplication.applicationState!=UIApplicationStateActive)
-                                    return;
-                                UIViewController *targetRoot=target.rootViewController;
-                                if(!targetRoot || !targetRoot.isViewLoaded ||
-                                   [targetRoot isKindOfClass:NSClassFromString(@"LCOrbitOverlayController")] ||
-                                   [targetRoot isKindOfClass:NSClassFromString(@"FMSettingsRootController")])
-                                    return;
-                                CGRect targetBounds=target.bounds;
-                                if(!isfinite(targetBounds.size.width) || !isfinite(targetBounds.size.height) ||
-                                   targetBounds.size.width<=0 || targetBounds.size.height<=0)
-                                    return;
-                                if(!CGRectEqualToRect(targetRoot.view.bounds,targetBounds)) {
-                                    targetRoot.view.frame=targetBounds;
-                                    targetRoot.view.bounds=CGRectMake(0,0,targetBounds.size.width,targetBounds.size.height);
-                                    [targetRoot.view setNeedsLayout];
-                                    [targetRoot.view layoutIfNeeded];
-                                }
-                            });
-                        } else {
+                        if(!CGRectEqualToRect(root.view.bounds,sceneBounds)) {
+                            root.view.frame=sceneBounds;
+                            root.view.bounds=sceneBounds;
                             [root.view setNeedsLayout];
                         }
                     }
@@ -1688,7 +1570,6 @@ static void FMInstallOrientationHooks(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         [[UIDevice currentDevice] beginGeneratingDeviceOrientationNotifications];
-        FMInstallFoldableGuestBootstrapHook();
         
         FMSwizzle(UIViewController.class, @selector(supportedInterfaceOrientations), @selector(fm_supportedInterfaceOrientations));
         SEL dunder = NSSelectorFromString(@"__supportedInterfaceOrientations");
