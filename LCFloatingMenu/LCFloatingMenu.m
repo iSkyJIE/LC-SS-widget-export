@@ -357,9 +357,8 @@ static BOOL FMSetAppHidden(NSDictionary *app, BOOL hidden) {
     return ok;
 }
 
-// UIScreen describes the display's base appearance; a Guest's UIWindowScene
-// can report its own forced Light/Dark appearance instead of the device choice.
-// Read screen traits first so "Follow System" does not inherit Guest styling.
+// Follow System is resolved from this plugin instance's owning Scene.
+// Never borrow appearance or display metrics from another active display.
 static __weak UIWindowScene *FMStyleScene;
 static UIUserInterfaceStyle FMLastResolvedSystemStyle=UIUserInterfaceStyleLight;
 // Resolve display properties from the scene that owns this plugin instance.
@@ -392,14 +391,11 @@ static BOOL FMValidStyle(UIUserInterfaceStyle style) {
 static UIUserInterfaceStyle FMSystemAppearance(void) {
     UIUserInterfaceStyle style=FMStyleScene.traitCollection.userInterfaceStyle;
     if(!FMValidStyle(style)) {
-        style=FMStyleScene.traitCollection.userInterfaceStyle;
-        if(!FMValidStyle(style)) {
-            for(UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-                if(![scene isKindOfClass:UIWindowScene.class] ||
-                   scene.activationState!=UISceneActivationStateForegroundActive) continue;
-                style=((UIWindowScene *)scene).traitCollection.userInterfaceStyle;
-                if(FMValidStyle(style)) break;
-            }
+        for(UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
+            if(![candidate isKindOfClass:UIWindowScene.class] ||
+               candidate.activationState!=UISceneActivationStateForegroundActive) continue;
+            style=((UIWindowScene *)candidate).traitCollection.userInterfaceStyle;
+            if(FMValidStyle(style)) break;
         }
     }
     // Retain the last resolved style during transient Unspecified traits.
