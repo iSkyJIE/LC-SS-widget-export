@@ -2811,7 +2811,7 @@ static UIImage *FMLogoBadgeImage(CGFloat diameter) {
         }
     }
     self.orb=nil;
-    CGRect f=[self orbFrame];
+    f=[self orbFrame];
     FMHitButton *button=[FMHitButton buttonWithType:UIButtonTypeCustom];
     button.tag=9200;
     button.docksLeft=self.left;
