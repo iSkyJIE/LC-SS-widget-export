@@ -1391,22 +1391,19 @@ static UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewControlle
             }
             if(scene) {
                 UIInterfaceOrientation current=scene.interfaceOrientation;
-                // A stale Portrait value during Guest cold launch must not win
-                // over the device's already-landscape posture. LiveContainer can
-                // create the scene before its final geometry has been applied.
-                if(current==UIInterfaceOrientationLandscapeRight ||
+                if(current==UIInterfaceOrientationPortrait ||
+                   current==UIInterfaceOrientationLandscapeRight ||
                    (!BoolPref(@"lockBanRightLandscape",YES) &&
-                    current==UIInterfaceOrientationLandscapeLeft)) return current;
+                    current==UIInterfaceOrientationLandscapeLeft)) {
+                    return current;
+                }
             }
         }
-        // Prefer the physical posture when UIKit's newly-created scene still
-        // reports Portrait. This is particularly important on foldable inner
-        // displays, where the Guest scene can lag behind the display geometry.
+        // Sensor fallback is only used before UIKit has attached a scene.
         UIDeviceOrientation dev=UIDevice.currentDevice.orientation;
         if(dev==UIDeviceOrientationLandscapeLeft) return UIInterfaceOrientationLandscapeRight;
         if(!BoolPref(@"lockBanRightLandscape",YES) &&
            dev==UIDeviceOrientationLandscapeRight) return UIInterfaceOrientationLandscapeLeft;
-        if(scene) return UIInterfaceOrientationPortrait;
         return UIInterfaceOrientationPortrait;
     }
     return [self fm_preferredInterfaceOrientationForPresentation];
@@ -1489,38 +1486,6 @@ static void FMHookAppDelegate(id<UIApplicationDelegate> delegate) {
 }
 @end
 
-static UIInterfaceOrientation FMRequestedLandscapeOrientation(UIWindowScene *scene) {
-    BOOL allowLeft=!BoolPref(@"lockBanRightLandscape",YES);
-    UIDeviceOrientation device=UIDevice.currentDevice.orientation;
-    if(device==UIDeviceOrientationLandscapeLeft) return UIInterfaceOrientationLandscapeRight;
-    if(allowLeft && device==UIDeviceOrientationLandscapeRight) return UIInterfaceOrientationLandscapeLeft;
-    // If the scene's own coordinate space is already wide while its reported
-    // interface orientation is stale Portrait, use the supported landscape side.
-    CGRect bounds=scene.coordinateSpace.bounds;
-    if(bounds.size.width>bounds.size.height) return UIInterfaceOrientationLandscapeRight;
-    return UIInterfaceOrientationUnknown;
-}
-
-static void FMRequestGuestLandscapeGeometry(UIWindowScene *scene) {
-    if(!scene || scene.interfaceOrientation!=UIInterfaceOrientationPortrait) return;
-    UIInterfaceOrientation target=FMRequestedLandscapeOrientation(scene);
-    if(target!=UIInterfaceOrientationLandscapeRight &&
-       !(target==UIInterfaceOrientationLandscapeLeft && !BoolPref(@"lockBanRightLandscape",YES))) return;
-    if(@available(iOS 16.0,*)) {
-        UIInterfaceOrientationMask mask=(target==UIInterfaceOrientationLandscapeLeft)?
-            UIInterfaceOrientationMaskLandscapeLeft:UIInterfaceOrientationMaskLandscapeRight;
-        UIWindowSceneGeometryPreferencesIOS *preferences=
-            [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:mask];
-        UIViewController *root=scene.windows.firstObject.rootViewController;
-        [root setNeedsUpdateOfSupportedInterfaceOrientations];
-        [scene requestGeometryUpdateWithPreferences:preferences errorHandler:^(NSError *error) {
-            // Geometry can be temporarily denied while the Guest launch
-            // transition is in flight. Scene/activation callbacks retry it.
-            (void)error;
-        }];
-    }
-}
-
 static void FMEnsureWindowOrientationLayout(void) {
     if(!BoolPref(@"unlockOrientation", YES)) return;
     // UIKit geometry belongs to a UIWindowScene, not to the physical screen.
@@ -1542,10 +1507,6 @@ static void FMEnsureWindowOrientationLayout(void) {
                 UIWindowScene *scene=(UIWindowScene *)candidate;
                 if(scene.activationState!=UISceneActivationStateForegroundActive) continue;
                 UIInterfaceOrientation orientation=scene.interfaceOrientation;
-                if(orientation==UIInterfaceOrientationPortrait) {
-                    FMRequestGuestLandscapeGeometry(scene);
-                    continue;
-                }
                 BOOL allowRightLandscape=!BoolPref(@"lockBanRightLandscape",YES);
                 BOOL allowedLandscape=orientation==UIInterfaceOrientationLandscapeRight ||
                     (allowRightLandscape && orientation==UIInterfaceOrientationLandscapeLeft);
