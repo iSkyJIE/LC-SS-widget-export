@@ -1365,7 +1365,7 @@ static void FMEnsureWindowOrientationLayout(void);
 // Its initial client settings currently hard-code Portrait. Only override that
 // one Guest-scene bootstrap when the *host UI scene itself* is already wide.
 // A folded outer display remains portrait and therefore takes the untouched path.
-static UIInterfaceOrientationMask FMCurrentSupportedOrientationsstatic UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewController *vc) {
+static UIInterfaceOrientationMask FMCurrentSupportedOrientations(UIViewController *vc) {
     if(!BoolPref(@"unlockOrientation", YES)) {
         return UIInterfaceOrientationMaskPortrait;
     }
