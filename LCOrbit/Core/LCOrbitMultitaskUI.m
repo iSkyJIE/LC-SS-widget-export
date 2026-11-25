@@ -190,6 +190,17 @@ static BOOL OrbitValidFrame(CGRect frame) {
     return isfinite(frame.origin.x) && isfinite(frame.origin.y) &&
         isfinite(frame.size.width) && isfinite(frame.size.height) && frame.size.width>0 && frame.size.height>0;
 }
+// The remote Guest can report its Presenter as mounted while its UIKit hosting
+// views still have zero geometry. Treat that as pending layout, not as a
+// completed fullscreen mount; a later pass must re-read the current host scene.
+static BOOL GuestHostingNeedsLayoutRepair(UIViewController *window) {
+    if(!window) return NO;
+    UIViewController *scene=SceneController(window);
+    UIView *hosting=scene?[(id)scene contentView]:nil;
+    if(!scene || !hosting) return NO;
+    return !OrbitValidFrame(scene.view.frame) ||
+        !OrbitValidFrame(hosting.frame) || !OrbitValidFrame(hosting.bounds);
+}
 // Legacy storage key and UI API retain the raw switch value. Product policy:
 // ON = default physical avoidance (v5); OFF = Guest-owned top safe area (v6).
 static BOOL PhysicalTopAvoidanceEnabled(NSString *bundle) {
@@ -641,6 +652,33 @@ static void InitialSceneSettings(id parameters,SEL selector,void (^block)(id)) {
         RecordGeometry(@"initial-plugin",window,settings);
     });
 }
+static void ScheduleGuestStartupLayoutRecovery(UIViewController *window,NSTimeInterval delay,NSString *stage) {
+    if(!NSThread.isMainThread || !window || !Fullscreen() || OrbitPiPProtectedWindow(window)) return;
+    __weak UIViewController *weakWindow=window;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)(delay*NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        UIViewController *strongWindow=weakWindow;
+        if(!strongWindow || !Fullscreen() || ![(id)SceneController(strongWindow) isAppRunning]) return;
+        if(!GuestHostingNeedsLayoutRepair(strongWindow)) return;
+        UIWindow *host=strongWindow.view.window ?: strongWindow.parentViewController.view.window;
+        if(!host || !OrbitValidFrame(host.bounds)) return;
+
+        RecordGeometry([stage stringByAppendingString:@"-before"],strongWindow,nil);
+        // Re-run the same plugin-owned layout path used by LC's next rotation
+        // callback, but only after UIKit has had time to attach the remote view.
+        [host setNeedsLayout];
+        [host layoutIfNeeded];
+        [strongWindow.view setNeedsLayout];
+        [strongWindow.view layoutIfNeeded];
+        LayoutFullscreen(strongWindow);
+        UIView *hosting=[(id)SceneController(strongWindow) contentView];
+        [hosting setNeedsLayout];
+        [hosting layoutIfNeeded];
+        UpdateScene(strongWindow,nil);
+        RecordGeometry([stage stringByAppendingString:@"-after"],strongWindow,nil);
+    });
+}
+
 static void PresenterReady(id scene,SEL selector) {
     if(!NSThread.isMainThread) {
         ((void(*)(id,SEL))OriginalPresenter)(scene,selector);return;
@@ -667,6 +705,13 @@ static void PresenterReady(id scene,SEL selector) {
         RecordGeometry(@"presenter-mounted",window,nil);
         [window.view layoutIfNeeded];
         UpdateScene(window,nil);
+        // First attach can precede the final remote hosting geometry on a
+        // resizable dual-display device. Retry only while the Guest view tree
+        // is genuinely zero-sized; every pass samples the current Scene.
+        ScheduleGuestStartupLayoutRecovery(window,.15,@"startup-layout-retry-150ms");
+        ScheduleGuestStartupLayoutRecovery(window,.50,@"startup-layout-retry-500ms");
+        ScheduleGuestStartupLayoutRecovery(window,1.25,@"startup-layout-retry-1250ms");
+        ScheduleGuestStartupLayoutRecovery(window,2.50,@"startup-layout-retry-2500ms");
         // On iOS 27 the host UIWindow may resolve its Dynamic Island safe
         // area after FBScene's first configure/activation transaction. Only
         // the explicit per-App UIKit experiment runs these bounded checks.
