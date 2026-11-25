@@ -161,7 +161,7 @@ static NSString *NSStringFromUIEdgeInsets(UIEdgeInsets insets) {
 + (instancetype)currentDevice { return [self new]; }
 @end
 @compatibility_alias UIDevice OrbitDevice;
-static char ViewportReadyKey,UIKitSyncSignatureKey,UIKitSyncPendingKey;
+static char ViewportReadyKey,UIKitSyncSignatureKey,UIKitSyncPendingKey,AppliedGeometrySignatureKey;
 static NSMutableDictionary *LayoutPreferences;
 @interface LCOrbitLog : NSObject
 + (void)appendEvent:(NSString *)event details:(NSDictionary *)details kind:(NSString *)kind;

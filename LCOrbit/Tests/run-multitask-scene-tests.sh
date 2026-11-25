@@ -12,6 +12,7 @@ for signature in ['static BOOL OrbitValidFrame(', 'static BOOL PhysicalTopAvoida
                   'static BOOL OrbitInsetsInViewport(', 'static UIEdgeInsets HostUIKitSafeInsets(', 'static BOOL HostedSafeArea(',
                   'static BOOL FullscreenGeometry(', 'static void ApplyGeometry(',
                   'static void ConfigureSafeArea(', 'static NSString *UIKitGeometrySignature(',
+                  'static NSString *AppliedGeometrySignature(', 'static BOOL GeometryAlreadyApplied(',
                   'static void UpdateScene(', 'static void UIKitResyncIfChanged(',
                   'static void UIKitScheduleGeometryProbe(',
                   'static void SceneSettings(', 'static void FinalSceneSettings(',
