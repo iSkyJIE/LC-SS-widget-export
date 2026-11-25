@@ -75,6 +75,13 @@ assert "UIDevice.currentDevice.orientation" not in body
 assert "allowedLandscape" in body
 print("Foldable scene geometry checks: PASS")
 PY
+# Plugin display metrics and appearance must come from its owning Scene, not main-screen globals.
+if grep -Fq 'UIScreen.mainScreen' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"; then
+    echo 'FloatingMenu must not read process-wide main-screen geometry or traits' >&2
+    exit 1
+fi
+grep -Fq 'FMSceneDisplayScale()' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+grep -Fq 'FMSceneMaximumFramesPerSecond(self.window)' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
 # A fold/unfold size change must reach FloatingMenu even when device orientation is unchanged.
 grep -Fq '_lastReportedSceneBounds' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
 grep -Fq 'postNotificationName:@"LCOrbitOverlayLayoutDidChangeNotification"' "$ROOT/LCOrbit/Core/LCOrbitOverlayManager.m"
