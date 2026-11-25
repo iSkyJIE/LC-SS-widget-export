@@ -101,6 +101,11 @@ assert "targetRoot.view.bounds=CGRectMake(0,0,targetBounds.size.width,targetBoun
 assert "targetRoot.view layoutIfNeeded" in layout
 print("Foldable guest cold-launch and deferred root-layout checks: PASS")
 PY
+# Guest cold launch: a stale Portrait scene must request supported landscape geometry.
+grep -Fq 'FMRequestGuestLandscapeGeometry(scene)' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+grep -Fq 'requestGeometryUpdateWithPreferences:preferences errorHandler:' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+grep -Fq 'setNeedsUpdateOfSupportedInterfaceOrientations' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
+grep -Fq 'FMRequestedLandscapeOrientation(scene)' "$ROOT/LCFloatingMenu/LCFloatingMenu.m"
 # The developer-only tweak-to-host option should display an overlay in LC UI
 # without loosening the existing Guest, SideStore, or LiveProcess exclusions.
 grep -Fq '+ (BOOL)isHostUI' "$ROOT/LCOrbit/Core/LCOrbitHost.m"
