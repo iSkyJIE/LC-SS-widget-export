@@ -164,8 +164,27 @@
     });
 }
 
+- (UIInterfaceOrientation)hostInterfaceOrientation {
+    // A LiveProcess guest is hosted inside this controller's scene. Its initial
+    // orientation must follow that scene; hard-coding Portrait leaves the guest
+    // rendered as a small portrait surface when the host is already landscape.
+    UIWindowScene *scene=self.view.window.windowScene ?: self.hostScene;
+    UIInterfaceOrientation orientation=scene.interfaceOrientation;
+    if(orientation!=UIInterfaceOrientationUnknown) return orientation;
+
+    // The scene may not have published its orientation during the first launch
+    // callback. Use the device orientation only as a last-resort fallback.
+    UIDeviceOrientation device=UIDevice.currentDevice.orientation;
+    if(device==UIDeviceOrientationLandscapeLeft) return UIInterfaceOrientationLandscapeRight;
+    if(device==UIDeviceOrientationLandscapeRight) return UIInterfaceOrientationLandscapeLeft;
+    if(device==UIDeviceOrientationPortrait || device==UIDeviceOrientationPortraitUpsideDown)
+        return UIInterfaceOrientationPortrait;
+    return UIInterfaceOrientationPortrait;
+}
+
 - (void)setUpAppPresenter {
     if(self.terminationRequested || self.isAppTerminationCleanUpCalled) return;
+    if(!self.hostScene) self.hostScene=self.view.window.windowScene;
     RBSProcessPredicate* predicate = [PrivClass(RBSProcessPredicate) predicateMatchingIdentifier:@(self.pid)];
     FBProcessManager *manager = [PrivClass(FBProcessManager) sharedInstance];
     // At this point, the process is spawned and we're ready to create a scene to render in our app
@@ -182,6 +201,8 @@
         settings.level = 1;
         settings.persistenceIdentifier = self.dataUUID;
         settings.statusBarDisabled = !self.isNativeWindow;
+        settings.deviceOrientation = UIDevice.currentDevice.orientation;
+        settings.interfaceOrientation = [self hostInterfaceOrientation];
         //settings.previewMaximumSize =
         //settings.deviceOrientationEventsEnabled = YES;
         if(!self.usesHostingControllerAPI) {
@@ -189,7 +210,7 @@
         }
     };
     void (^updateSceneClientSettings)(id) = ^void(UIMutableApplicationSceneClientSettings *clientSettings) {
-        clientSettings.interfaceOrientation = UIInterfaceOrientationPortrait;
+        clientSettings.interfaceOrientation = [self hostInterfaceOrientation];
         clientSettings.statusBarStyle = 0;
     };
 
