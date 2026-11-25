@@ -8,6 +8,9 @@ from pathlib import Path
 import sys
 source=(Path(sys.argv[1])/'LCOrbit/Core/LCOrbitMultitaskUI.m').read_text()
 parts=[]
+# PresenterReady schedules production-only delayed UIKit probes. The isolated
+# geometry fixture tests the pure repair predicate and stubs the async runner.
+parts.append('static void ScheduleGuestStartupLayoutRecovery(UIViewController *window,NSTimeInterval delay,NSString *stage) { (void)window; (void)delay; (void)stage; }')
 for signature in ['static BOOL OrbitValidFrame(', 'static BOOL GuestHostingNeedsLayoutRepair(', 'static BOOL PhysicalTopAvoidanceEnabled(', 'static BOOL GuestOwnsTopInset(', 'static BOOL UIKitTopInsetEnhanced(', 'static CGRect GuestViewport(', 'static CGRect FullscreenHostingFrame(', 'static UIEdgeInsets PortraitInsets(',
                   'static BOOL OrbitInsetsInViewport(', 'static UIEdgeInsets HostUIKitSafeInsets(', 'static BOOL HostedSafeArea(',
                   'static BOOL FullscreenGeometry(', 'static void ApplyGeometry(',
