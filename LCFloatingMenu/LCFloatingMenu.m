@@ -362,11 +362,35 @@ static BOOL FMSetAppHidden(NSDictionary *app, BOOL hidden) {
 // Read screen traits first so "Follow System" does not inherit Guest styling.
 static __weak UIWindowScene *FMStyleScene;
 static UIUserInterfaceStyle FMLastResolvedSystemStyle=UIUserInterfaceStyleLight;
+// Resolve display properties from the scene that owns this plugin instance.
+// A process-wide main-screen reference is ambiguous on dual-display devices.
+static UIScreen *FMSceneScreen(void) {
+    UIWindowScene *scene=FMStyleScene;
+    if(!scene) {
+        for(UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
+            if([candidate isKindOfClass:UIWindowScene.class] &&
+               candidate.activationState==UISceneActivationStateForegroundActive) {
+                scene=(UIWindowScene *)candidate;
+                break;
+            }
+        }
+    }
+    return scene.screen;
+}
+static CGFloat FMSceneDisplayScale(void) {
+    CGFloat scale=FMSceneScreen().scale;
+    return isfinite(scale) && scale>0 ? scale : 1;
+}
+static NSInteger FMSceneMaximumFramesPerSecond(UIWindow *window) {
+    UIScreen *screen=window.windowScene.screen ?: FMSceneScreen();
+    NSInteger maximum=screen.maximumFramesPerSecond;
+    return maximum>0?maximum:60;
+}
 static BOOL FMValidStyle(UIUserInterfaceStyle style) {
     return style==UIUserInterfaceStyleLight || style==UIUserInterfaceStyleDark;
 }
 static UIUserInterfaceStyle FMSystemAppearance(void) {
-    UIUserInterfaceStyle style=UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+    UIUserInterfaceStyle style=FMStyleScene.traitCollection.userInterfaceStyle;
     if(!FMValidStyle(style)) {
         style=FMStyleScene.traitCollection.userInterfaceStyle;
         if(!FMValidStyle(style)) {
@@ -3214,7 +3238,7 @@ static CGFloat FMDropletPullDistance(CGFloat inward,CGFloat scale) {
     _morphShownT=-1;
     // One outline rebuild per display frame is all a drag can show; faster input than the
     // screen would only be thrown away.
-    CGFloat maximum=UIScreen.mainScreen.maximumFramesPerSecond;
+    CGFloat maximum=FMSceneMaximumFramesPerSecond(self.window);
     _morphFrameTick=maximum>90?1./maximum+.0005:1./60.+.0005;
     return YES;
 }
@@ -3991,7 +4015,7 @@ static void FMDrawAppIcon(UIView *box,NSDictionary *app,CGFloat size,BOOL curren
     box.clipsToBounds=YES;
     box.layer.masksToBounds=YES;
     box.backgroundColor=UIColor.clearColor;
-    UIImage *real=FMGuestIconSized(app,(size+3)*MAX(1.0,UIScreen.mainScreen.scale));
+    UIImage *real=FMGuestIconSized(app,(size+3)*FMSceneDisplayScale());
     if(real) {
         // 彻底消除四角白边：系统 IconServices 生成的图标图片外圈自带 1px 高光描边与四角抗锯齿高亮杂色，
         // 将图片略微外扩 1.5pt（3x 屏幕约 4.5 物理像素），由 box 的超椭圆连续曲率统一进行严格 masksToBounds 裁切，
@@ -5242,8 +5266,7 @@ static void FMDrawAppIcon(UIView *box,NSDictionary *app,CGFloat size,BOOL curren
     if(!changed) return;
     if(self.settingsWindow) [self updateSettingsContent];
     else [self draw];
-    FMLog(@"system-appearance",[NSString stringWithFormat:@"screen=%ld scene=%ld menu=%ld mode=%ld",
-        (long)UIScreen.mainScreen.traitCollection.userInterfaceStyle,
+    FMLog(@"system-appearance",[NSString stringWithFormat:@"scene=%ld menu=%ld mode=%ld",
         (long)self.window.windowScene.traitCollection.userInterfaceStyle,
         (long)renderedStyle,(long)[HostDefaults() integerForKey:Pref(@"appearanceMode")]]);
 }
@@ -7844,7 +7867,7 @@ static UIView *FMDockRow(UIView *content,CGFloat padding,BOOL separator,CGFloat 
             [line.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:20],
             [line.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-20],
             [line.topAnchor constraintEqualToAnchor:row.topAnchor],
-            [line.heightAnchor constraintEqualToConstant:1/UIScreen.mainScreen.scale]
+            [line.heightAnchor constraintEqualToConstant:1/FMSceneDisplayScale()]
         ]];
     }
     return row;
@@ -8084,7 +8107,7 @@ static UIView *FMDockCard(UIStackView *rows) {
     _content=[[UIView alloc] initWithFrame:_glass.bounds];
     [FMGlassContent(_glass) addSubview:_content];
     NSMutableArray<UIView *> *items=[NSMutableArray array],*dividers=[NSMutableArray array];
-    CGFloat pw=_pw,ph=_ph,hairline=1/UIScreen.mainScreen.scale;
+    CGFloat pw=_pw,ph=_ph,hairline=1/FMSceneDisplayScale();
     CGFloat shoulder=FMMenuStyleValue(@"menuExtension")*(_compact?22./28:1);
     UIColor *rule=[FMThemeColor(FMColorBorder) colorWithAlphaComponent:.55];
     BOOL dark=FMMenuDark();
