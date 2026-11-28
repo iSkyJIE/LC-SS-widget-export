@@ -52,6 +52,7 @@ xcrun clang "$BUILD_COMMIT_FLAG" -arch arm64 -isysroot "$SDK" -miphoneos-version
     "$ROOT/LCOrbit/Core/LCOrbitHost.m" \
     "$ROOT/LCOrbit/Core/LCOrbitGuestUIKitDiagnostics.m" \
     "$ROOT/LCOrbit/Core/LCOrbitGuestService.m" \
+    "$ROOT/LCFloatingMenu/LCOrbitSwitcherAdapter.m" \
     "$ROOT/LCOrbit/Core/LCOrbitMultitask.m" \
     "$ROOT/LCOrbit/Core/LCOrbitAutomaticPiP.m" \
     "$ROOT/LCOrbit/Core/LCOrbitMultitaskUI.m" \
