@@ -58,6 +58,8 @@ static void (^Pending)(NSNumber *,NSError *);
 @implementation LCOrbitHost
 + (NSUserDefaults *)hostDefaults { return Defaults; }
 + (BOOL)isHostUI { return Host; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (NSString *)appGroupPath { return nil; }
 + (NSDictionary *)guestInfo { return nil; }
 + (NSString *)guestIdentifier { return @"test.host"; }
