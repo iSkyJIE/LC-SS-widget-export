@@ -26,6 +26,8 @@ static NSString *LatestAudit;
 + (NSDictionary *)guestInfo { return nil; }
 + (NSString *)guestIdentifier { return @"test.host"; }
 + (BOOL)isHostUI { return HostMode; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (BOOL)isSupportedGuest { return !HostMode; }
 + (UIWindowScene *)activeScene { return nil; }
 @end
