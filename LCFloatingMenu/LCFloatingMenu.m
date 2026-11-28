@@ -2262,11 +2262,7 @@ static UIImage *FMLogoBadgeImage(CGFloat diameter) {
     if(!isfinite(sceneBounds.origin.x) || !isfinite(sceneBounds.origin.y) ||
        !isfinite(sceneBounds.size.width) || !isfinite(sceneBounds.size.height) ||
        sceneBounds.size.width<=0 || sceneBounds.size.height<=0) return;
-    SEL sideSel=NSSelectorFromString(@"isSideStore");
-    SEL procSel=NSSelectorFromString(@"isLiveProcess");
-    if(![NSUserDefaults respondsToSelector:sideSel] || ![NSUserDefaults respondsToSelector:procSel]) return;
-    if(((BOOL(*)(id,SEL))objc_msgSend)(NSUserDefaults.class,sideSel) ||
-       ((BOOL(*)(id,SEL))objc_msgSend)(NSUserDefaults.class,procSel)) return;
+    if([LCOrbitHost isSideStore] || [LCOrbitHost isLiveProcess]) return;
     if(self.window && self.window.windowScene != scene) [self detachFromScene];
     FMStyleScene=scene;
     [self observeAppearanceInScene:scene];
