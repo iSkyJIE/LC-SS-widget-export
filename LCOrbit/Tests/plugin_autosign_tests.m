@@ -15,6 +15,8 @@ static NSString *Destination;
 
 @implementation LCOrbitHost
 + (BOOL)isHostUI { return Host; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (NSUserDefaults *)hostDefaults { return NSUserDefaults.standardUserDefaults; }
 @end
 
