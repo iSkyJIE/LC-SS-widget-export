@@ -15,6 +15,8 @@ extern NSUInteger OrbitTestDiskLoads;
 @implementation LCOrbitHost
 + (NSUserDefaults *)hostDefaults { return Defaults; }
 + (BOOL)isHostUI { return YES; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (NSString *)appGroupPath { return nil; }
 + (NSDictionary *)guestInfo { return nil; }
 + (NSString *)guestIdentifier { return @"storage.status.test"; }
