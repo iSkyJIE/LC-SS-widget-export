@@ -12,6 +12,8 @@ static NSUInteger Dispatches, Instances, Registrations, Starts, ModeSyncs;
 + (NSString *)guestIdentifier { return @"fixture"; }
 + (UIWindowScene *)activeScene { return nil; }
 + (BOOL)isHostUI { return !LiveProcess; }
++ (BOOL)isLiveProcess { return LiveProcess; }
++ (BOOL)isSideStore { return NO; }
 + (BOOL)isSupportedGuest { return NO; }
 @end
 @interface LCOrbitGuestUIKitDiagnostics : NSObject
