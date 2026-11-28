@@ -102,7 +102,7 @@ static BOOL FMModelFlag(id object, NSString *key) {
     NSString *uuid = FMAdapterString(target[@"uuid"]);
     NSMutableArray<NSDictionary *> *freshMatches = [NSMutableArray array];
     for (NSDictionary *candidate in [LCOrbitGuestService installedApps]) {
-        if ([FMAdapterString(candidate[@"identity"]) isEqualToString:identity] &&
+        if ((!identity.length || [FMAdapterString(candidate[@"identity"]) isEqualToString:identity]) &&
             [FMAdapterCanonicalPath(FMAdapterString(candidate[@"folder"])) isEqualToString:folderPath] &&
             [FMAdapterString(candidate[@"uuid"]) isEqualToString:uuid]) {
             [freshMatches addObject:candidate];
