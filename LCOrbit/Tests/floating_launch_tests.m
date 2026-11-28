@@ -128,6 +128,14 @@ static void FMSyncSharedTweaks(void (^completion)(void)) {
     return YES;
 }
 @end
+@interface LCOrbitSwitcherAdapter : NSObject
++ (BOOL)launchGuestDictionary:(NSDictionary *)app error:(NSError **)error;
+@end
+@implementation LCOrbitSwitcherAdapter
++ (BOOL)launchGuestDictionary:(NSDictionary *)app error:(NSError **)error {
+    return [LCOrbitGuestService launchGuest:app error:error];
+}
+@end
 @interface FMManager : NSObject {
     BOOL _isPanning;
     id _panOrb;
