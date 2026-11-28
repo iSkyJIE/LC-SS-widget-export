@@ -94,6 +94,24 @@ static BOOL FMModelFlag(id object, NSString *key) {
 
 + (id)freshUpstreamAppForDictionary:(NSDictionary *)target {
     if (![target isKindOfClass:NSDictionary.class] || FMAdapterFlag(target[@"builtin"])) return nil;
+
+    // Re-read the authoritative LC inventory immediately before crossing into
+    // the upstream API. Never trust a stale drawer dictionary for a launch.
+    NSString *identity = FMAdapterString(target[@"identity"]);
+    NSString *folderPath = FMAdapterCanonicalPath(FMAdapterString(target[@"folder"]));
+    NSString *uuid = FMAdapterString(target[@"uuid"]);
+    NSMutableArray<NSDictionary *> *freshMatches = [NSMutableArray array];
+    for (NSDictionary *candidate in [LCOrbitGuestService installedApps]) {
+        if ([FMAdapterString(candidate[@"identity"]) isEqualToString:identity] &&
+            [FMAdapterCanonicalPath(FMAdapterString(candidate[@"folder"])) isEqualToString:folderPath] &&
+            [FMAdapterString(candidate[@"uuid"]) isEqualToString:uuid]) {
+            [freshMatches addObject:candidate];
+        }
+    }
+    if (freshMatches.count != 1 || !FMAdapterFlag(freshMatches.firstObject[@"launchable"]))
+        return nil;
+    target = freshMatches.firstObject;
+
     Class modelClass = FMLCSwitcherAppInfoClass();
     SEL initializer = NSSelectorFromString(@"initWithName:folderName:bundleId:version:dataUUID:appPath:icon:isJITEnabled:");
     if (!modelClass || ![modelClass instancesRespondToSelector:initializer]) return nil;
