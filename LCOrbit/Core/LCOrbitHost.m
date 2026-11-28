@@ -56,8 +56,14 @@
     if([bundlePath containsString:@"/Documents/Applications/"]) return NO;
     NSArray<NSString *> *hostClasses=@[
         @"DecoratedAppSceneViewController",
+        @"LiveContainer.DecoratedAppSceneViewController",
+        @"LiveContainerSwiftUI.DecoratedAppSceneViewController",
         @"PiPManager",
+        @"LiveContainer.PiPManager",
+        @"LiveContainerSwiftUI.PiPManager",
         @"LCMultitaskSceneViewController",
+        @"LiveContainer.LCMultitaskSceneViewController",
+        @"LiveContainerSwiftUI.LCMultitaskSceneViewController",
         @"GnoixMultitaskBridge",
         @"GnoixHostUI.GnoixMultitaskBridge",
         @"Gnoix.GnoixMultitaskBridge"
