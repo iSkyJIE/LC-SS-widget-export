@@ -95,42 +95,34 @@ static BOOL FMModelFlag(id object, NSString *key) {
 + (id)freshUpstreamAppForDictionary:(NSDictionary *)target {
     if (![target isKindOfClass:NSDictionary.class] || FMAdapterFlag(target[@"builtin"])) return nil;
     Class modelClass = FMLCSwitcherAppInfoClass();
-    if (!modelClass) return nil;
-    NSString *wantedPath = FMAdapterCanonicalPath(FMAdapterString(target[@"folder"]));
-    NSString *wantedFolder = FMAdapterString(target[@"path"]);
-    NSString *wantedUUID = FMAdapterString(target[@"uuid"]);
-    NSString *wantedBundle = FMAdapterString(target[@"bundle"]);
-    NSMutableArray *matches = [NSMutableArray array];
-    for (id candidate in [self scanInstalledApps]) {
-        BOOL samePath = wantedPath.length &&
-            [FMAdapterCanonicalPath(candidate.appPath) isEqualToString:wantedPath];
-        BOOL sameFolderAndUUID = wantedFolder.length && wantedUUID.length &&
-            [candidate.folderName isEqualToString:wantedFolder] &&
-            [candidate.dataUUID isEqualToString:wantedUUID];
-        BOOL sameBundle = wantedBundle.length && candidate.bundleId.length &&
-            [candidate.bundleId isEqualToString:wantedBundle];
-        if ((samePath || sameFolderAndUUID) && (!wantedBundle.length || sameBundle))
-            [matches addObject:candidate];
-    }
-    if (matches.count != 1) return nil;
+    SEL initializer = NSSelectorFromString(@"initWithName:folderName:bundleId:version:dataUUID:appPath:icon:isJITEnabled:");
+    if (!modelClass || ![modelClass instancesRespondToSelector:initializer]) return nil;
 
-    // Reacquire the actual LCSwitcherAppInfo instance. The namespaced model above
-    // is only a safe read-only projection for FloatingMenu; it is never passed
-    // across the upstream Objective-C API boundary.
-    NSArray *raw = ((id (*)(id, SEL))objc_msgSend)(FMLCSwitcherClass(),
-        NSSelectorFromString(@"scanInstalledApps"));
-    LCOrbitSwitcherAppInfo *match = matches.firstObject;
-    for (id item in raw) {
-        NSString *path = FMAdapterCanonicalPath(FMModelString(item, @"appPath"));
-        NSString *folder = FMModelString(item, @"folderName");
-        NSString *uuid = FMModelString(item, @"dataUUID");
-        NSString *bundle = FMModelString(item, @"bundleId");
-        BOOL same = (path.length && [path isEqualToString:FMAdapterCanonicalPath(match.appPath)]) ||
-            ([folder isEqualToString:match.folderName] && [uuid isEqualToString:match.dataUUID] &&
-             [bundle isEqualToString:match.bundleId]);
-        if (same) return item;
-    }
-    return nil;
+    NSString *folder = FMAdapterString(target[@"path"]);
+    NSString *uuid = FMAdapterString(target[@"uuid"]);
+    NSString *path = FMAdapterString(target[@"folder"]);
+    if (!folder.length || !uuid.length || !path.length) return nil;
+
+    // Build the exact public LCSwitcher model from the already revalidated
+    // FloatingMenu inventory record. This also supports shared-container apps,
+    // which the upstream scanInstalledApps currently does not enumerate.
+    NSString *name = FMAdapterString(target[@"title"]);
+    NSString *bundle = FMAdapterString(target[@"bundle"]);
+    NSString *version = @"";
+    NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
+        [path stringByAppendingPathComponent:@"Info.plist"]];
+    if ([info isKindOfClass:NSDictionary.class])
+        version = FMAdapterString(info[@"CFBundleShortVersionString"]);
+    BOOL jit = NO;
+    NSDictionary *lcInfo = [NSDictionary dictionaryWithContentsOfFile:
+        [path stringByAppendingPathComponent:@"LCAppInfo.plist"]];
+    if ([lcInfo isKindOfClass:NSDictionary.class])
+        jit = FMAdapterFlag(lcInfo[@"isJITNeeded"]) || FMAdapterFlag(lcInfo[@"isJITEnabled"]);
+
+    id allocated = ((id (*)(id, SEL))objc_msgSend)(modelClass, @selector(alloc));
+    id (*initCall)(id, SEL, id, id, id, id, id, id, id, BOOL) =
+        (id (*)(id, SEL, id, id, id, id, id, id, id, BOOL))objc_msgSend;
+    return initCall(allocated, initializer, name, folder, bundle, version, uuid, path, nil, jit);
 }
 
 + (void)presentTransitionAndSwitchToApp:(LCOrbitSwitcherAppInfo *)app
@@ -214,27 +206,22 @@ static BOOL FMModelFlag(id object, NSString *key) {
     SEL selector = NSSelectorFromString(@"presentTransitionAndSwitchToApp:completion:");
     if (![self isAvailable] || ![cls respondsToSelector:selector])
         return FMAdapterFail(error, 1, @"没有检测到 LCSwitcher。请确认 LCSwitcher 已安装并注入当前进程。");
+    if (FMAdapterFlag(app[@"shared"])) {
+        // LCSwitcher's current public launcher resolves private Documents/Applications
+        // paths only. Keep shared-app launches on FloatingMenu's scope-aware service.
+        return [LCOrbitGuestService launchGuest:app error:error];
+    }
     id upstream = [self freshUpstreamAppForDictionary:app];
     if (!upstream)
-        return FMAdapterFail(error, 2, @"LCSwitcher 应用记录无法唯一匹配，请刷新应用列表。");
+        return FMAdapterFail(error, 2, @"无法构造 LCSwitcher 应用记录，请刷新应用列表。");
 
-    // Upstream API is asynchronous and owns the handoff animation. Its completion
-    // reports acceptance; do not invoke LCOrbitGuestService's parallel launcher.
-    __block BOOL accepted = NO;
-    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    void (^completion)(BOOL) = ^(BOOL finished) {
-        accepted = finished;
-        dispatch_semaphore_signal(semaphore);
-    };
-    ((void (*)(id, SEL, id, id))objc_msgSend)(cls, selector, upstream, completion);
-    // The public API schedules handoff work itself. A short bounded wait lets the
-    // existing synchronous menu contract receive the result without blocking UI.
-    long wait = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)));
-    if (wait != 0) {
-        if (error) *error = FMAdapterError(3, @"LCSwitcher 已接收切换请求，正在执行交接。");
-        return YES;
-    }
-    return accepted ? YES : FMAdapterFail(error, 4, @"LCSwitcher 未能完成应用交接。");
+    // The upstream method invokes setupIfNeeded internally and performs the
+    // handoff asynchronously. Do not block the main thread waiting for completion.
+    ((void (*)(id, SEL, id, id))objc_msgSend)(cls, selector, upstream, ^(BOOL finished) {
+        if (!finished) NSLog(@"[LCFloatingMenu][LCSwitcher] app handoff did not finish: %@",
+            FMAdapterString(app[@"identity"]));
+    });
+    return YES;
 }
 
 + (BOOL)launchGuestPath:(NSString *)path uuid:(NSString *)uuid error:(NSError **)error {
@@ -245,16 +232,10 @@ static BOOL FMModelFlag(id object, NSString *key) {
     SEL selector = NSSelectorFromString(@"presentTransitionAndReturnHomeWithCompletion:");
     if (![self isAvailable] || ![cls respondsToSelector:selector])
         return FMAdapterFail(error, 1, @"没有检测到 LCSwitcher，无法调用返回主页接口。");
-    __block BOOL accepted = NO;
-    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-    void (^completion)(BOOL) = ^(BOOL finished) {
-        accepted = finished;
-        dispatch_semaphore_signal(semaphore);
-    };
-    ((void (*)(id, SEL, id))objc_msgSend)(cls, selector, completion);
-    long wait = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)));
-    if (wait != 0) return YES;
-    return accepted ? YES : FMAdapterFail(error, 4, @"LCSwitcher 未能返回宿主主页。");
+    ((void (*)(id, SEL, id))objc_msgSend)(cls, selector, ^(BOOL finished) {
+        if (!finished) NSLog(@"[LCFloatingMenu][LCSwitcher] return-home handoff did not finish");
+    });
+    return YES;
 }
 
 @end
