@@ -11,6 +11,7 @@
 #import "../LCOrbit/Core/LCOrbitEventBus.h"
 #import "../LCOrbit/Core/LCOrbitOverlayManager.h"
 #import "../LCOrbit/Core/LCOrbitGuestService.h"
+#import "LCOrbitSwitcherAdapter.h"
 #import "../LCOrbit/Core/LCOrbitMultitask.h"
 #import "../LCOrbit/Core/LCOrbitTaskSwitcher.h"
 #import "../LCOrbit/Core/LCOrbitHostSettings.h"
@@ -6559,7 +6560,7 @@ static UIImage *FMCreateWinterSnowImage(FMSnowflakeStyle style) {
         }
         NSError *error=nil;
         [LCOrbitTaskSwitcher beginDockLaunch:dockToken];
-        BOOL accepted=[LCOrbitGuestService launchGuest:target error:&error];
+        BOOL accepted=[LCOrbitSwitcherAdapter launchGuestDictionary:target error:&error];
         if(manager.launchGeneration!=generation) {
             [LCOrbitTaskSwitcher cancelDockLaunch:dockToken];
             return;
@@ -6610,7 +6611,7 @@ static UIImage *FMCreateWinterSnowImage(FMSnowflakeStyle style) {
                           payload:@{@"target":path,@"guestID":GuestID()}];
     NSError *error=nil;
     // The service revalidates eligibility before invoking LC's launcher.
-    if(![LCOrbitGuestService launchGuestPath:path uuid:uuid error:&error]) {
+    if(![LCOrbitSwitcherAdapter launchGuestPath:path uuid:uuid error:&error]) {
         FMLog(@"switch-rejected",error.domain?:@"unknown");
         NSString *title=error.code==LCOrbitGuestErrorIneligible?@"不可安全切换":@"切换失败";
         [self showMessage:title details:error.localizedDescription?:@"启动失败"];
