@@ -72,7 +72,14 @@
 
     NSBundle *hostBundle=[self callHostSelector:@"lcMainBundle"];
     if([hostBundle isKindOfClass:NSBundle.class] &&
-       [hostBundle.bundlePath isEqualToString:NSBundle.mainBundle.bundlePath]) return YES;
+       [hostBundle.bundlePath isEqualToString:NSBundle.mainBundle.bundlePath]) {
+        // Preserve the legacy opt-in preference as a diagnostic setting only;
+        // injection itself is authoritative once this is the real LC host.
+        (void)[[self hostDefaults] boolForKey:@"LCLoadTweaksToSelf"];
+        return YES;
+    }
+    // The class-based path above is the normal LCSwitcher-compatible host route.
+    (void)[[self hostDefaults] boolForKey:@"LCLoadTweaksToSelf"];
     return NO;
 }
 + (BOOL)isSupportedGuest {
