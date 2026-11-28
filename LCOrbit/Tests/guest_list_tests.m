@@ -20,6 +20,8 @@ static NSURL *LaunchedURL;
 + (NSDictionary *)guestInfo { return GuestInfo; }
 + (NSString *)guestIdentifier { return GuestID ?: @"test.host"; }
 + (BOOL)isHostUI { return GuestInfo == nil; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (BOOL)isSupportedGuest { return GuestInfo != nil; }
 + (UIWindowScene *)activeScene { return nil; }
 @end
