@@ -12,6 +12,8 @@ static NSUInteger Failures, Assertions, Notices;
 + (NSDictionary *)guestInfo { return nil; }
 + (NSString *)guestIdentifier { return CurrentID ?: @"test.host"; }
 + (BOOL)isHostUI { return YES; }
++ (BOOL)isLiveProcess { return NO; }
++ (BOOL)isSideStore { return NO; }
 + (BOOL)isSupportedGuest { return NO; }
 + (UIWindowScene *)activeScene { return nil; }
 @end
