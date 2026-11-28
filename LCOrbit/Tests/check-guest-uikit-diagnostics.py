@@ -20,7 +20,7 @@ checks = {
     "LiveProcess constructor starts diagnostics before returning":
         'NSClassFromString(@"LCOrbitGuestUIKitDiagnostics")' in core and
         core.index('NSSelectorFromString(@"startInLiveProcess")') <
-        core.index("if([NSUserDefaults respondsToSelector:process]"),
+        core.index("if([LCOrbitHost isLiveProcess])"),
     "guest diagnostics do not bootstrap the FloatingMenu UI":
         "LCFloatingMenuRegisterWithOrbit" in core and "return;" in core,
     "diagnostic snapshots require explicit user opt in":
