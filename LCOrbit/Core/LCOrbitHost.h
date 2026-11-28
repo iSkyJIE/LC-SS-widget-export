@@ -8,6 +8,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)guestIdentifier;
 + (nullable UIWindowScene *)activeScene;
 + (BOOL)isHostUI;
++ (BOOL)isLiveProcess;
++ (BOOL)isSideStore;
 + (BOOL)isSupportedGuest;
 @end
 NS_ASSUME_NONNULL_END
