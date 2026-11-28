@@ -117,9 +117,9 @@ static BOOL FMModelFlag(id object, NSString *key) {
     if (!modelClass || ![modelClass instancesRespondToSelector:initializer]) return nil;
 
     NSString *folder = FMAdapterString(target[@"path"]);
-    NSString *uuid = FMAdapterString(target[@"uuid"]);
+    NSString *targetUUID = FMAdapterString(target[@"uuid"]);
     NSString *path = FMAdapterString(target[@"folder"]);
-    if (!folder.length || !uuid.length || !path.length) return nil;
+    if (!folder.length || !targetUUID.length || !path.length) return nil;
 
     // Build the exact public LCSwitcher model from the already revalidated
     // FloatingMenu inventory record. This also supports shared-container apps,
@@ -140,7 +140,7 @@ static BOOL FMModelFlag(id object, NSString *key) {
     id allocated = ((id (*)(id, SEL))objc_msgSend)(modelClass, @selector(alloc));
     id (*initCall)(id, SEL, id, id, id, id, id, id, id, BOOL) =
         (id (*)(id, SEL, id, id, id, id, id, id, id, BOOL))objc_msgSend;
-    return initCall(allocated, initializer, name, folder, bundle, version, uuid, path, nil, jit);
+    return initCall(allocated, initializer, name, folder, bundle, version, targetUUID, path, nil, jit);
 }
 
 + (void)presentTransitionAndSwitchToApp:(LCOrbitSwitcherAppInfo *)app
