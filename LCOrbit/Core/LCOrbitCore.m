@@ -142,9 +142,11 @@ __attribute__((constructor)) static void LCOrbitEntry(void) {
     SEL start=NSSelectorFromString(@"startInLiveProcess");
     if(diagnostics && [diagnostics respondsToSelector:start])
         ((void(*)(id,SEL))objc_msgSend)(diagnostics,start);
-    SEL process=NSSelectorFromString(@"isLiveProcess");
-    if([NSUserDefaults respondsToSelector:process] &&
-       ((BOOL(*)(id,SEL))objc_msgSend)(NSUserDefaults.class,process)) return;
+    if([LCOrbitHost isLiveProcess]) return;
+    NSLog(@"[LCFloatingMenu] constructor loaded bundle=%@ process=%@ LCSwitcher=%@",
+          NSBundle.mainBundle.bundleIdentifier ?: @"?",
+          NSProcessInfo.processInfo.processName ?: @"?",
+          NSClassFromString(@"LCSwitcher") ? @"present" : @"absent");
     dispatch_async(dispatch_get_main_queue(), ^{
         LCOrbitCore *core=[LCOrbitCore sharedCore];
         if([LCOrbitHost isHostUI])
