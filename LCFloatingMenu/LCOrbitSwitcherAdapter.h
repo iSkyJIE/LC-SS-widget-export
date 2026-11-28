@@ -25,9 +25,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,assign) BOOL isBuiltIn;
 @end
 
-/// LCSwitcher-compatible API backed by LCFloatingMenu's existing guarded
-/// inventory and launch services. It never installs a second floating UI.
+/// Runtime bridge to the public LCSwitcher API. FloatingMenu owns its own UI;
+/// this adapter never defines or links upstream Objective-C runtime classes.
 @interface LCOrbitSwitcherAdapter : NSObject
++ (BOOL)isAvailable;
 + (void)setupIfNeeded;
 + (NSArray<LCOrbitSwitcherAppInfo *> *)scanInstalledApps;
 + (void)presentTransitionAndSwitchToApp:(LCOrbitSwitcherAppInfo *)app
